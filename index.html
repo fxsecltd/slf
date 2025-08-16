@@ -664,11 +664,15 @@
         });
 
         function calculateTokenAmount(ethAmount, buyPricePerUnit) {
-            // Полностью избегаем BigInt для дробных чисел
-            const ethInWei = ethAmount * 1e18;  // 1 ETH = 1e18 wei
-            const microTokens = ethInWei / buyPricePerUnit;  // Количество микротокенов
-            return microTokens / 1e6;  // Конвертируем в полные токены (decimals=6)
-        }        
+            // Конвертируем ETH в wei
+            const ethInWei = ethAmount * 1e18;
+            
+            // Рассчитываем количество микротокенов (0.000001 SLF)
+            const microTokens = ethInWei / buyPricePerUnit;
+            
+            // Конвертируем в полные токены с учетом decimals=6
+            return microTokens / 1e6;
+        }
         
         function updateTokenCalculation() {
             const ethInput = document.getElementById('buyEthAmount');
@@ -686,8 +690,8 @@
                 const buyPriceText = document.getElementById('buyPrice').textContent;
                 const buyPricePerUnit = parseFloat(buyPriceText.split(' ')[0]);
                 
-                // Проверка минимальной суммы
-                const minEth = buyPricePerUnit / 1e24;  // Минимальная сумма в ETH
+                // Проверка минимальной суммы (стоимость 1 микротокена в ETH)
+                const minEth = buyPricePerUnit / 1e24;
                 if (ethAmount < minEth) {
                     tokenInput.value = '0.000000';
                     return;
@@ -700,8 +704,7 @@
                 console.error('Token calculation error:', error);
                 tokenInput.value = '';
             }
-        }       
-        
+        }        
         function updateEthCalculation() {
             const ethInput = document.getElementById('buyEthAmount');
             const tokenInput = document.getElementById('buyTokenAmount');
