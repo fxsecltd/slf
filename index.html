@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' 'unsafe-eval' https://cdn.jsdelivr.net;
+      connect-src 'self' https://*.ethereum.org https://*.infura.io https://*.ankr.com;
+    ">
     <title>Self Liquidity Farm</title>
     <script nonce="rAnd0m123" src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
     <style>
