@@ -804,6 +804,37 @@
             }
         });
 
+        // Добавьте этот код в обработчик клика кнопки
+        document.getElementById('addToMetaMask').addEventListener('click', async () => {
+            try {
+                // Параметры токена SLF (замените на реальные значения)
+                const tokenDetails = {
+                    type: 'ERC20',
+                    options: {
+                        address: contractAddress, // Адрес контракта токена
+                        symbol: 'SLF',            // Символ токена
+                        decimals: 6,              // Количество знаков после запятой (1 SLF = 1e6 единиц)
+                        image: 'https://fxsecltd.github.io/slf/logo.png' // URL логотипа
+                    }
+                };
+        
+                // Вызов API MetaMask
+                const wasAdded = await window.ethereum.request({
+                    method: 'wallet_watchAsset',
+                    params: tokenDetails
+                });
+        
+                if (wasAdded) {
+                    alert('Токен SLF успешно добавлен в MetaMask!');
+                } else {
+                    alert('Пользователь отменил добавление токена');
+                }
+            } catch (error) {
+                console.error('Ошибка добавления токена:', error);
+                alert('Ошибка при добавлении токена. Проверьте консоль для деталей.');
+            }
+        });        
+        
         // Language switchers
         document.getElementById('lang-en').addEventListener('click', (e) => {
             e.preventDefault();
