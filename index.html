@@ -660,7 +660,7 @@
             const price = buyPricePerUnit.toString().split('.')[0];
             
             // Используем BigInt только для целых чисел
-            const microTokens = (BigInt(ethInWei) * 1e6n) / BigInt(price);
+            const microTokens = (BigInt(ethInWei)) / BigInt(price);
             
             // Конвертируем в полные токены
             return Number(microTokens) / 1e6;
