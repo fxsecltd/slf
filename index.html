@@ -348,22 +348,18 @@
         let userAddress = localStorage.getItem('slf_wallet') || '';
         let currentLang = localStorage.getItem('slf_lang') || 'en';
         let refreshInterval = null;
+        let isManualMode = false; // Режим без MetaMask
+        let currentProviderIndex = 0;        
         
         // ===== Основные функции =====
         
         async function initWeb3() {
             console.log("Initializing Web3...");
             
-            // 1. Modern MetaMask detection
+            // 1. Пробуем Modern MetaMask
             if (window.ethereum) {
                 try {
-                    // Создаем экземпляр Web3 без немедленного подключения
-                    web3 = new Web3();
-                    
-                    // Устанавливаем провайдер после создания экземпляра
-                    web3.setProvider(window.ethereum);
-                    
-                    // Современный метод запроса аккаунтов
+                    web3 = new Web3(window.ethereum);
                     await window.ethereum.request({ method: 'eth_requestAccounts' });
                     
                     // Настройка обработчиков событий
@@ -374,18 +370,62 @@
                     return true;
                 } catch (error) {
                     console.error("MetaMask error:", error);
-                    return false;
+                    // Продолжаем пробовать другие варианты
                 }
             }
             
-            console.error("Ethereum provider not found");
+            // 2. Пробуем Legacy Web3 (старые версии MetaMask)
+            if (window.web3?.givenProvider) {
+                try {
+                    web3 = new Web3(window.web3.givenProvider);
+                    console.log("Connected via Legacy Web3");
+                    return true;
+                } catch (error) {
+                    console.error("Legacy Web3 error:", error);
+                }
+            }
+            
+            // 3. Fallback на публичные RPC
+            console.log("Trying public RPC fallback...");
+            return await connectToPublicRPC();
+        }
+        
+        async function connectToPublicRPC() {
+            for (const providerUrl of RPC_PROVIDERS) {
+                try {
+                    console.log(`Trying RPC: ${providerUrl}`);
+                    const provider = new Web3.providers.HttpProvider(providerUrl, {
+                        timeout: 5000 // Таймаут 5 секунд
+                    });
+                    
+                    const testWeb3 = new Web3(provider);
+                    
+                    // Тестовый запрос для проверки соединения
+                    await testWeb3.eth.getBlockNumber();
+                    
+                    web3 = testWeb3;
+                    contract = new web3.eth.Contract(contractABI, contractAddress);
+                    isManualMode = true;
+                    
+                    console.log(`Connected via public RPC: ${providerUrl}`);
+                    return true;
+                } catch (error) {
+                    console.error(`Failed to connect to ${providerUrl}:`, error);
+                }
+            }
+            
+            console.error("All RPC providers failed");
+            alert("Could not connect to any Ethereum node. Please install MetaMask or try again later.");
             return false;
         }
         
+        // Обработчики событий
         function handleDisconnect(error) {
             console.log("Disconnected:", error);
             stopDataRefresh();
-            disconnectWallet();
+            if (!isManualMode) {
+                disconnectWallet();
+            }
         }
         
         function handleAccountsChanged(accounts) {
@@ -397,79 +437,88 @@
                 loadData();
             }
         }
+        
         async function connectWallet() {
+            const walletInput = document.getElementById('walletAddress');
+            const manualAddress = walletInput.value.trim();
+            
+            // Режим MetaMask
+            if (window.ethereum || window.web3?.givenProvider) {
+                try {
+                    if (!web3) await initWeb3();
+                    
+                    const accounts = await web3.eth.getAccounts();
+                    userAddress = accounts[0] || (await web3.eth.requestAccounts())[0];
+                    
+                    walletInput.value = userAddress;
+                    walletInput.readOnly = true;
+                    localStorage.setItem('wallet_source', 'metamask');
+                    isManualMode = false;
+                    
+                    updateUI();
+                    startDataRefresh();
+                    return;
+                } catch (error) {
+                    console.error("MetaMask connection failed:", error);
+                }
+            }
+            
+            // Ручной режим (без MetaMask)
+            if (!isValidAddress(manualAddress)) {
+                alert("Please enter a valid Ethereum address");
+                return;
+            }
+            
+            if (!web3 && !await initWeb3()) return;
+            
+            userAddress = manualAddress;
+            localStorage.setItem('slf_wallet', userAddress);
+            localStorage.setItem('wallet_source', 'manual');
+            isManualMode = true;
+            
+            updateUI();
+            alert("Manual mode activated. Some features may be limited.");
+            await loadData();
+        }        
+        
+        async function loadData() {
+            if (!web3 || !contract) return;
+            
             try {
-                // Инициализация Web3
-                if (!web3 && !await initWeb3()) {
-                    throw new Error("Failed to initialize Web3");
-                }
-        
-                // Получаем текущий аккаунт
-                const accounts = await web3.eth.getAccounts();
-                if (accounts.length === 0) {
-                    const requestedAccounts = await window.ethereum.request({ 
-                        method: 'eth_requestAccounts' 
-                    });
-                    userAddress = requestedAccounts[0];
-                } else {
-                    userAddress = accounts[0];
-                }
-        
-                // Сохраняем данные
-                localStorage.setItem('slf_wallet', userAddress);
-                document.getElementById('walletAddress').value = userAddress;
-                document.getElementById('walletAddress').readOnly = true;
-        
-                // Инициализация контракта
-                contract = new web3.eth.Contract(contractABI, contractAddress);
-        
-                // Первая загрузка данных
-                await loadData();
+                // Для ручного режима получаем только цены
+                const promises = [
+                    contract.methods.asknow().call(),
+                    contract.methods.bidnow().call()
+                ];
                 
-                // Запускаем автообновление
-                startDataRefresh();
+                if (!isManualMode) {
+                    promises.push(contract.methods.balanceOf(userAddress).call());
+                    promises.push(web3.eth.getBalance(userAddress));
+                }
                 
-                // Обновляем UI
-                updateUI();
-        
+                const [buyPrice, sellPrice, tokenBalance, ethBalance] = await Promise.all(promises);
+                
+                // Обновляем цены
+                document.getElementById('buyPrice').textContent = formatEth(buyPrice);
+                document.getElementById('sellPrice').textContent = formatEth(sellPrice);
+                
+                // Обновляем балансы (только для MetaMask)
+                if (!isManualMode) {
+                    document.getElementById('tokenBalance').textContent = (tokenBalance / 1e6).toFixed(6);
+                    document.getElementById('walletEthBalance').textContent = formatEth(ethBalance);
+                    updateSellValue(tokenBalance, sellPrice);
+                }
             } catch (error) {
-                console.error("Wallet connection failed:", error);
-                alert("Connection failed: " + error.message);
+                console.error("Load data error:", error);
+                // Пробуем переподключиться к другому RPC
+                if (isManualMode) {
+                    currentProviderIndex++;
+                    await initWeb3();
+                    await loadData();
+                }
             }
         }
         
-        async function loadData() {
-            if (!web3 || !contract || !userAddress) return;
-        
-            try {
-                // Параллельное получение всех данных
-                const [buyPrice, sellPrice, tokenBalance] = await Promise.all([
-                    contract.methods.asknow().call(),
-                    contract.methods.bidnow().call(),
-                    contract.methods.balanceOf(userAddress).call()
-                ]);
-        
-                // Проверка и форматирование цен
-                const formatPrice = (price) => {
-                    const value = web3.utils.fromWei(price.toString(), 'ether');
-                    return isNaN(value) ? '0.000000' : parseFloat(value).toFixed(6);
-                };
-        
-                document.getElementById('buyPrice').textContent = formatPrice(buyPrice) + ' ETH';
-                document.getElementById('sellPrice').textContent = formatPrice(sellPrice) + ' ETH';
-        
-                // Расчет баланса
-                const tokenValue = (tokenBalance / 1e6).toFixed(6);
-                document.getElementById('tokenBalance').textContent = isNaN(tokenValue) ? '0.000000' : tokenValue;
-        
-                // Расчет стоимости в ETH
-                updateSellCalculation(tokenBalance, sellPrice);
-                updateTokenCalculation();
-                
-            } catch (error) {
-                console.error('Error loading data:', error);
-            }
-        }        
         function formatEth(weiValue) {
             if (!web3) return "0 ETH";
             const eth = web3.utils.fromWei(weiValue.toString(), 'ether');
@@ -479,6 +528,7 @@
                 useGrouping: false
             }) + ' ETH';
         }        
+        
         // Конвертация ETH в Wei с обработкой дробных чисел
         function ethToWei(ethValue) {
           const weiString = web3.utils.toWei(ethValue.toString(), 'ether');
