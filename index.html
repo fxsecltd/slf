@@ -518,6 +518,19 @@
                 }
             }
         }
+
+        function updateSellValue(tokenBalance, sellPrice) {
+            try {
+                // Расчет в минимальных единицах
+                const valueWei = (BigInt(tokenBalance) * BigInt(sellPrice)) / BigInt(1e6);
+                const ethValue = web3.utils.fromWei(valueWei.toString(), 'ether');
+                
+                document.getElementById('ethValue').textContent = parseFloat(ethValue).toFixed(6) + ' ETH';
+                document.getElementById('receiveEth').textContent = parseFloat(ethValue).toFixed(6) + ' ETH';
+            } catch (error) {
+                console.error("Sell value calculation failed:", error);
+            }
+        }        
         
         function formatEth(weiValue) {
             if (!web3) return "0 ETH";
