@@ -504,7 +504,8 @@
                     const eth = web3.utils.fromWei(wei.toString(), 'ether');
                     return parseFloat(eth).toFixed(6) + ' ETH';
                 };
-        
+                console.log("buyPrice:" + buyPrice);
+                console.log("sellPrice:" + sellPrice);
                 document.getElementById('buyPrice').textContent = formatEth(buyPrice);
                 document.getElementById('sellPrice').textContent = formatEth(sellPrice);
         
