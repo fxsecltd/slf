@@ -524,7 +524,7 @@
 
         function formatTokenDisplay(value) {
             // Для очень больших чисел используем экспоненциальную форму с 6 знаками
-            if (value >= 1e9) {
+            if (value >= 1e21) {
                 return value.toExponential(6);
             }
             // Для обычных чисел - фиксированную форму
