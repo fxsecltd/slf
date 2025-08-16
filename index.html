@@ -545,7 +545,8 @@
                 const totalValueUnits = balance * price;
         
                 // 3. Конвертируем в полные токены (делим на 1e6)
-                const totalValue = totalValueUnits / BigInt(1e6);
+                //const totalValue = totalValueUnits / BigInt(1e6);
+                const totalValue = totalValueUnits;
         
                 // 4. Конвертируем wei в ETH
                 const ethValue = web3.utils.fromWei(totalValue.toString(), 'ether');
