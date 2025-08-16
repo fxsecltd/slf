@@ -694,7 +694,7 @@
                 }
                 
                 const tokens = calculateTokenAmount(ethAmount, buyPricePerUnit);
-                tokenInput.value = tokens.toFixed(6);
+                tokenInput.value = formatTokenDisplay(tokens);
                 
             } catch (error) {
                 console.error('Token calculation error:', error);
