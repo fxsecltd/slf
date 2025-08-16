@@ -491,37 +491,38 @@
             if (!web3 || !contract || !userAddress) return;
         
             try {
-                // Параллельное получение всех данных
-                const [buyPrice, sellPrice, tokenBalance, ethBalance] = await Promise.all([
+                const [buyPrice, sellPrice, tokenBalance] = await Promise.all([
                     contract.methods.asknow().call(),
                     contract.methods.bidnow().call(),
-                    contract.methods.balanceOf(userAddress).call(),
-                    web3.eth.getBalance(userAddress)
+                    contract.methods.balanceOf(userAddress).call()
                 ]);
         
-                console.log('Raw data:', { buyPrice, sellPrice, tokenBalance, ethBalance });
+                // Обновляем цены (18 знаков)
+                document.getElementById('buyPrice').textContent = formatFullPrecision(buyPrice);
+                document.getElementById('sellPrice').textContent = formatFullPrecision(sellPrice);
         
-                // Обновление цен
-                document.getElementById('buyPrice').textContent = formatEthAmount(buyPrice);
-                document.getElementById('sellPrice').textContent = formatEthAmount(sellPrice);
+                // Отображаем баланс токенов (формат: 123.456000)
+                const tokenAmount = (BigInt(tokenBalance) / BigInt(1e6)).toString();
+                document.getElementById('tokenBalance').textContent = formatTokenDisplay(tokenAmount);
         
-                // Обновление балансов
-                document.getElementById('tokenBalance').textContent = formatTokenAmount(tokenBalance);
-                document.getElementById('walletEthBalance').textContent = formatEthAmount(ethBalance);
-        
-                // Расчет стоимости токенов в ETH
-                const sellValueWei = (BigInt(tokenBalance) * BigInt(sellPrice)) / BigInt(1e6);
-                document.getElementById('ethValue').textContent = formatEthAmount(sellValueWei);
-                document.getElementById('receiveEth').textContent = formatEthAmount(sellValueWei);
-        
-                // Обновление расчета токенов
-                updateTokenCalculation();
+                // Расчет стоимости в ETH (без лишнего умножения)
+                const ethValue = calculateTokenValue(tokenBalance, sellPrice);
+                document.getElementById('ethValue').textContent = formatFullPrecision(ethValue);
+                document.getElementById('receiveEth').textContent = formatFullPrecision(ethValue);
                 
             } catch (error) {
                 console.error('Error loading data:', error);
             }
         }
         
+        function formatTokenDisplay(value) {
+            // value - количество целых токенов
+            return parseFloat(value).toLocaleString('en', {
+                minimumFractionDigits: 6,
+                maximumFractionDigits: 6,
+                useGrouping: false
+            });
+        }        
         function updateSellValue(tokenBalance, sellPrice) {
             try {
                 // Расчет в минимальных единицах
@@ -633,24 +634,25 @@
             
             try {
                 const ethAmount = parseFloat(ethInput.value);
-                if (isNaN(ethAmount) || ethAmount <= 0) {
+                if (isNaN(ethAmount)) {
                     tokenInput.value = '';
                     return;
                 }
         
                 const buyPriceText = document.getElementById('buyPrice').textContent;
-                const buyPrice = parseFloat(buyPriceText.split(' ')[0]);
+                const buyPricePerUnit = parseFloat(buyPriceText.split(' ')[0]);
                 
-                if (!isNaN(buyPrice) && buyPrice > 0) {
-                    const ethInWei = web3.utils.toWei(ethAmount.toString(), 'ether');
-                    const tokens = (parseInt(ethInWei) / buyPrice / 1e6).toFixed(6);
-                    tokenInput.value = formatInputValue(tokens);
+                if (!isNaN(buyPricePerUnit)) {
+                    // Правильный расчет без лишнего деления
+                    const tokens = calculateTokenAmount(ethAmount, buyPricePerUnit);
+                    tokenInput.value = formatTokenDisplay(tokens);
                 }
             } catch (error) {
                 console.error('Token calculation error:', error);
                 tokenInput.value = '';
             }
-        }        
+        }
+
         function updateEthCalculation() {
             const ethInput = document.getElementById('buyEthAmount');
             const tokenInput = document.getElementById('buyTokenAmount');
@@ -683,25 +685,17 @@
         }
 
         function formatFullPrecision(weiValue) {
-            if (!web3 || !weiValue) return '0.000000000000000000 ETH';
+            if (!web3) return "0.000000000000000000 ETH";
             
             try {
-                // Конвертируем wei в ETH без потери точности
                 const ethValue = web3.utils.fromWei(weiValue.toString(), 'ether');
-                
-                // Разбиваем на целую и дробную части
                 const [integerPart, fractionalPart] = ethValue.split('.');
-                
-                // Дополняем дробную часть до 18 знаков
                 const fullFraction = (fractionalPart || '').padEnd(18, '0').substring(0, 18);
-                
                 return `${integerPart}.${fullFraction} ETH`;
-            } catch (error) {
-                console.error('Formatting error:', error);
-                return '0.000000000000000000 ETH';
+            } catch {
+                return "0.000000000000000000 ETH";
             }
-        }        
-
+        }
         // Для отображения балансов токенов (6 знаков)
         function formatTokenAmount(value) {
             const num = Number(value) / 1e6; // Учитываем 1e6 единиц на 1 токен
@@ -732,6 +726,26 @@
             });
         }        
         
+        // Функция для расчета стоимости токенов в ETH
+        function calculateTokenValue(tokenAmount, pricePerUnit) {
+            // tokenAmount - количество в минимальных единицах (1 токен = 1e6 единиц)
+            // pricePerUnit - цена за 1 минимальную единицу в wei
+            
+            // Убираем лишнее умножение на 1e6, так как pricePerUnit уже за единицу
+            const valueWei = (BigInt(tokenAmount) * BigInt(pricePerUnit));
+            return valueWei.toString();
+        }
+        
+        // Функция для расчета количества токенов
+        function calculateTokenAmount(ethAmount, pricePerUnit) {
+            // ethAmount - сумма в ETH
+            // pricePerUnit - цена за 1 минимальную единицу в wei
+            
+            const ethInWei = web3.utils.toWei(ethAmount.toString(), 'ether');
+            // Делим только на pricePerUnit без лишнего деления
+            const units = BigInt(ethInWei) / BigInt(pricePerUnit);
+            return units.toString();
+        }        
         // Translations
         const translations = {
             en: {
