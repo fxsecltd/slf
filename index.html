@@ -488,34 +488,37 @@
         }        
         
         async function loadData() {
-            if (!web3 || !contract || !userAddress) return;
+            if (!web3 || !contract || !userAddress) {
+                console.error("Missing requirements:", {web3, contract, userAddress});
+                return;
+            }
         
             try {
-                // Параллельное получение данных
+                console.log("Fetching contract data...");
+                
                 const [buyPrice, sellPrice, tokenBalance] = await Promise.all([
                     contract.methods.asknow().call(),
                     contract.methods.bidnow().call(),
                     contract.methods.balanceOf(userAddress).call()
                 ]);
         
-                console.log('Raw data:', {
-                    buyPrice,
-                    sellPrice,
-                    tokenBalance
-                });
+                console.log("Raw contract data:", {buyPrice, sellPrice, tokenBalance});
         
-                // Обновление цен
+                // Проверка полученных значений
+                if (!buyPrice || !sellPrice || !tokenBalance) {
+                    throw new Error("Invalid contract response");
+                }
+        
+                // Обновляем интерфейс
                 document.getElementById('buyPrice').textContent = formatFullPrecision(buyPrice);
                 document.getElementById('sellPrice').textContent = formatFullPrecision(sellPrice);
-        
-                // Обновление баланса токенов
                 document.getElementById('tokenBalance').textContent = formatTokenAmount(tokenBalance);
-        
-                // Расчет стоимости токенов
+                
+                // Расчет стоимости
                 updateSellValue(tokenBalance, sellPrice);
                 
             } catch (error) {
-                console.error('Error loading data:', error);
+                console.error("Failed to load data:", error);
             }
         }
         function formatTokenDisplay(value) {
@@ -529,32 +532,43 @@
 
         function updateSellValue(tokenBalance, sellPrice) {
             try {
-                // 1. Конвертируем баланс токенов в минимальные единицы (уже учтено в tokenBalance)
-                // 2. Умножаем на цену продажи (за 1 минимальную единицу)
-                const valueWei = (BigInt(tokenBalance) * BigInt(sellPrice));
-                
-                // 3. Делим на 1e6 (так как 1 токен = 1e6 единиц)
-                const finalValue = valueWei / BigInt(1e6);
-                
-                // 4. Конвертируем в ETH
-                const ethValue = web3.utils.fromWei(finalValue.toString(), 'ether');
-                
+                console.log('Calculating sell value:', {
+                    tokenBalance: tokenBalance.toString(),
+                    sellPrice: sellPrice.toString()
+                });
+        
+                // 1. Конвертируем в BigInt
+                const balance = BigInt(tokenBalance);
+                const price = BigInt(sellPrice);
+        
+                // 2. Рассчитываем общую стоимость в минимальных единицах
+                const totalValueUnits = balance * price;
+        
+                // 3. Конвертируем в полные токены (делим на 1e6)
+                const totalValue = totalValueUnits / BigInt(1e6);
+        
+                // 4. Конвертируем wei в ETH
+                const ethValue = web3.utils.fromWei(totalValue.toString(), 'ether');
+        
                 // 5. Форматируем вывод
                 const formattedValue = parseFloat(ethValue).toLocaleString('en', {
                     minimumFractionDigits: 6,
                     maximumFractionDigits: 6,
                     useGrouping: false
                 });
+        
+                console.log('Calculated ETH value:', formattedValue);
                 
+                // 6. Обновляем интерфейс
                 document.getElementById('ethValue').textContent = formattedValue + ' ETH';
                 document.getElementById('receiveEth').textContent = formattedValue + ' ETH';
                 
             } catch (error) {
-                console.error('Sell value calculation error:', error);
+                console.error('Sell value calculation failed:', error);
                 document.getElementById('ethValue').textContent = '0.000000 ETH';
                 document.getElementById('receiveEth').textContent = '0.000000 ETH';
             }
-        }        
+        }
         function formatEth(weiValue) {
             if (!web3) return "0 ETH";
             const eth = web3.utils.fromWei(weiValue.toString(), 'ether');
@@ -704,11 +718,10 @@
         }
 
         function formatFullPrecision(weiValue) {
-            if (!web3) return "0.000000000000000000 ETH";
             try {
                 const eth = web3.utils.fromWei(weiValue.toString(), 'ether');
                 const [integer, fraction] = eth.split('.');
-                const fractionPadded = (fraction || '').padEnd(18, '0').slice(0, 18);
+                const fractionPadded = (fraction || '0').padEnd(18, '0').substring(0, 18);
                 return `${integer}.${fractionPadded} ETH`;
             } catch {
                 return "0.000000000000000000 ETH";
@@ -718,8 +731,7 @@
         function formatTokenAmount(tokenBalance) {
             try {
                 const tokens = BigInt(tokenBalance) / BigInt(1e6);
-                const fraction = '000000'; // фиксированные 6 нулей
-                return `${tokens.toString()}.${fraction}`;
+                return `${tokens.toString()}.000000`;
             } catch {
                 return "0.000000";
             }
