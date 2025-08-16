@@ -521,15 +521,16 @@
                 console.error("Failed to load data:", error);
             }
         }
-        function formatTokenDisplay(value) {
-            // value - количество целых токенов
-            return parseFloat(value).toLocaleString('en', {
-                minimumFractionDigits: 6,
-                maximumFractionDigits: 6,
-                useGrouping: false
-            });
-        }        
 
+        function formatTokenDisplay(value) {
+            // Для очень больших чисел используем экспоненциальную форму с 6 знаками
+            if (value >= 1e9) {
+                return value.toExponential(6);
+            }
+            // Для обычных чисел - фиксированную форму
+            return value.toFixed(6);
+        }
+        
         function updateSellValue(tokenBalance, sellPrice) {
             try {
                 console.log('Calculating sell value:', {
@@ -699,7 +700,8 @@
                 console.error('Token calculation error:', error);
                 tokenInput.value = '';
             }
-        }        
+        }       
+        
         function updateEthCalculation() {
             const ethInput = document.getElementById('buyEthAmount');
             const tokenInput = document.getElementById('buyTokenAmount');
