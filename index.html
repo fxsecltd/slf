@@ -522,15 +522,6 @@
             }
         }
 
-        function formatTokenDisplay(value) {
-            // Для очень больших чисел используем экспоненциальную форму с 6 знаками
-            if (value >= 1e21) {
-                return value.toExponential(6);
-            }
-            // Для обычных чисел - фиксированную форму
-            return value.toFixed(6);
-        }
-        
         function updateSellValue(tokenBalance, sellPrice) {
             try {
                 console.log('Calculating sell value:', {
@@ -664,14 +655,28 @@
         });
 
         function calculateTokenAmount(ethAmount, buyPricePerUnit) {
-            // Конвертируем ETH в wei
-            const ethInWei = ethAmount * 1e18;
+            // Конвертируем ETH в wei с использованием BigInt
+            const ethInWei = BigInt(Math.floor(ethAmount * 1e18));
+            
+            // Конвертируем цену в BigInt
+            const price = BigInt(buyPricePerUnit);
             
             // Рассчитываем количество микротокенов (0.000001 SLF)
-            const microTokens = ethInWei / buyPricePerUnit;
+            const microTokens = (ethInWei * 1e6n) / price;
             
-            // Конвертируем в полные токены с учетом decimals=6
-            return microTokens / 1e6;
+            // Конвертируем в полные токены (делим на 1e6)
+            return Number(microTokens) / 1e6;
+        }
+        
+        function formatTokenDisplay(value) {
+            // Если значение больше 1e9, показываем в экспоненциальной форме
+            if (value >= 1e9) {
+                return value.toExponential(4);
+            }
+            // Для обычных значений - фиксированный формат
+            const formatted = value.toFixed(6);
+            // Удаляем лишние нули после запятой
+            return formatted.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '');
         }
         
         function updateTokenCalculation() {
@@ -690,10 +695,15 @@
                 const buyPriceText = document.getElementById('buyPrice').textContent;
                 const buyPricePerUnit = parseFloat(buyPriceText.split(' ')[0]);
                 
-                // Проверка минимальной суммы (стоимость 1 микротокена в ETH)
-                const minEth = buyPricePerUnit / 1e24;
-                if (ethAmount < minEth) {
-                    tokenInput.value = '0.000000';
+                // Проверка минимальной суммы
+                if (ethAmount < (buyPricePerUnit / 1e24)) {
+                    tokenInput.value = '0';
+                    return;
+                }
+                
+                // Проверка максимального значения (1e21 ETH)
+                if (ethAmount > 1e21) {
+                    tokenInput.value = 'MAX_VALUE_EXCEEDED';
                     return;
                 }
                 
@@ -702,9 +712,10 @@
                 
             } catch (error) {
                 console.error('Token calculation error:', error);
-                tokenInput.value = '';
+                tokenInput.value = 'ERROR';
             }
-        }        
+        }
+        
         function updateEthCalculation() {
             const ethInput = document.getElementById('buyEthAmount');
             const tokenInput = document.getElementById('buyTokenAmount');
