@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
-      script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.jsdelivr.net;
+      script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.jsdelivr.net;gethBalance
       style-src 'self' 'unsafe-inline';
       connect-src 'self' https://*.ethereum.org https://*.infura.io https://*.ankr.com;
       frame-src 'self' https://*.metamask.io;
@@ -359,13 +359,15 @@
         // ===== Основные функции =====
         
         async function initWeb3() {
-            // 1. Проверяем Modern MetaMask
+            console.log("Initializing Web3...");
+            
+            // 1. Пробуем Modern MetaMask
             if (window.ethereum) {
                 try {
                     web3 = new Web3(window.ethereum);
                     await window.ethereum.request({ method: 'eth_requestAccounts' });
                     
-                    // Правильные обработчики событий
+                    // Настройка обработчиков событий
                     window.ethereum.on('disconnect', handleDisconnect);
                     window.ethereum.on('accountsChanged', handleAccountsChanged);
                     
@@ -376,13 +378,14 @@
                 }
             }
             
-            // 2. Fallback для публичных RPC
-            return await connectToPublicRPC();
+            console.error("Ethereum provider not found");
+            return false;
         }
         
         function handleDisconnect(error) {
             console.log("Disconnected:", error);
             stopDataRefresh();
+            disconnectWallet();
         }
         
         function handleAccountsChanged(accounts) {
@@ -390,6 +393,7 @@
                 disconnectWallet();
             } else {
                 userAddress = accounts[0];
+                localStorage.setItem('slf_wallet', userAddress);
                 loadData();
             }
         }        
@@ -436,34 +440,52 @@
         }
         
         async function loadData() {
-          if (!web3 || !contract || !userAddress) return;
+            if (!web3 || !contract || !userAddress) return;
         
-          try {
-            const [buyPrice, sellPrice, tokenBalance] = await Promise.all([
-              contract.methods.asknow().call(),
-              contract.methods.bidnow().call(),
-              contract.methods.balanceOf(userAddress).call()
-            ]);
+            try {
+                // Получаем все данные параллельно
+                const [ethBalance, tokenBalance, buyPrice, sellPrice] = await Promise.all([
+                    web3.eth.getBalance(userAddress),
+                    contract.methods.balanceOf(userAddress).call(),
+                    contract.methods.asknow().call(),
+                    contract.methods.bidnow().call()
+                ]);
         
-            // Конвертация цен
-            document.getElementById('buyPrice').textContent = 
-              web3.utils.fromWei(buyPrice, 'ether') + ' ETH';
-            document.getElementById('sellPrice').textContent = 
-              web3.utils.fromWei(sellPrice, 'ether') + ' ETH';
+                // Обновляем баланс ETH
+                document.getElementById('walletEthBalance').textContent = 
+                    formatEth(ethBalance);
         
-            // Конвертация баланса токенов (1 SLF = 1e6 единиц)
-            const tokenBalanceSLF = (tokenBalance / 1e6).toFixed(6);
-            document.getElementById('tokenBalance').textContent = tokenBalanceSLF;
+                // Обновляем баланс токенов (1 SLF = 1e6 единиц)
+                document.getElementById('tokenBalance').textContent = 
+                    (tokenBalance / 1e6).toFixed(6);
         
-            // Расчет выручки
-            await calculateSellValue();
-            updateTokenCalculation();        
-            document.getElementById('walletEthBalance').textContent = formatEth(ethBalance);              
-          } catch (error) {
-            console.error('Error loading data:', error);
-          }
+                // Обновляем цены
+                document.getElementById('buyPrice').textContent = 
+                    formatEth(buyPrice);
+                document.getElementById('sellPrice').textContent = 
+                    formatEth(sellPrice);
+        
+                // Расчет выручки при продаже
+                const sellValueWei = (BigInt(tokenBalance) * BigInt(sellPrice)) / BigInt(1e6);
+                document.getElementById('ethValue').textContent = 
+                    formatEth(sellValueWei);
+                document.getElementById('receiveEth').textContent = 
+                    formatEth(sellValueWei);
+        
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
         }
         
+        function formatEth(weiValue) {
+            if (!web3) return "0 ETH";
+            const eth = web3.utils.fromWei(weiValue.toString(), 'ether');
+            return parseFloat(eth).toLocaleString('en', {
+                minimumFractionDigits: 6,
+                maximumFractionDigits: 6,
+                useGrouping: false
+            }) + ' ETH';
+        }        
         // Конвертация ETH в Wei с обработкой дробных чисел
         function ethToWei(ethValue) {
           const weiString = web3.utils.toWei(ethValue.toString(), 'ether');
@@ -485,7 +507,7 @@
             loadData().catch(console.error);
             refreshInterval = setInterval(() => {
                 loadData().catch(console.error);
-            }, 15000);
+            }, 15000); // Обновление каждые 15 секунд
         }
         
         function stopDataRefresh() {
@@ -493,7 +515,7 @@
                 clearInterval(refreshInterval);
                 refreshInterval = null;
             }
-        }        
+        }
         function updateUI() {
             document.getElementById('connectWallet').classList.add('hidden');
             document.getElementById('disconnectWallet').classList.remove('hidden');
@@ -527,6 +549,9 @@
 
         // ===== Инициализация =====
         document.addEventListener('DOMContentLoaded', async () => {
+            // Инициализация языка
+            setLanguage(currentLang);
+            
             // Восстановление сессии
             if (localStorage.getItem('wallet_source') === 'metamask' && userAddress) {
                 if (await initWeb3()) {
@@ -536,7 +561,6 @@
                     startDataRefresh();
                 }
             }
-            
             // Назначение обработчиков
             document.getElementById('connectWallet').addEventListener('click', connectWallet);
             document.getElementById('disconnectWallet').addEventListener('click', disconnectWallet);
@@ -752,23 +776,6 @@
                 clearInterval(refreshInterval);
                 refreshInterval = null;
             }
-        }
-
-        // Format ETH values
-        function formatEth(weiValue) {
-            if (!web3) return "0 ETH";
-            
-            // Конвертируем wei в ETH
-            const ethValue = web3.utils.fromWei(weiValue.toString(), 'ether');
-            
-            // Форматируем без научной нотации
-            const formatted = parseFloat(ethValue).toLocaleString('en', {
-                minimumFractionDigits: 6,
-                maximumFractionDigits: 6,
-                useGrouping: false
-            });
-            
-            return formatted + ' ETH';
         }
 
         async function updateSellCalculation() {
