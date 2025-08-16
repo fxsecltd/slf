@@ -667,7 +667,6 @@
         }
         
         function formatTokenDisplay(value) {
-            if (value >= 1e9) return value.toExponential(4).replace('e+', 'e');
             return value.toFixed(6).replace(/(\.0*|(?<=\.\d*?)0*)$/, '');
         }
         
