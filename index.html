@@ -341,11 +341,13 @@
             "https://eth-mainnet.g.alchemy.com/v2/demo"
         ];
 
-        // Глобальные переменные
+        // Глобальные переменные (в начале файла)
         let web3;
         let contract;
-        let currentProviderIndex = 0;
         let userAddress = localStorage.getItem('slf_wallet') || '';
+        let currentLang = localStorage.getItem('slf_lang') || 'en';
+        let refreshInterval = null; // Добавляем эту строку        // Глобальные переменные
+        let currentProviderIndex = 0;
         let isManualMode = false;
 
         // Инициализация при загрузке страницы
@@ -430,57 +432,28 @@
 
         // Подключение кошелька
         async function connectWallet() {
-            console.log("Попытка подключения кошелька...");
-            const walletInput = document.getElementById('walletAddress');
-            const manualAddress = walletInput.value.trim();
-            
-            // Проверяем ручной ввод
-            if (!isValidAddress(manualAddress)) {
-                alert(translations[currentLang].invalidAddress);
-                return;
-            }
-            
-            // 1. Пробуем подключиться через MetaMask
-            if (window.ethereum || window.web3?.givenProvider) {
-                console.log("Обнаружен MetaMask, пробуем подключиться...");
-                try {
-                    if (!web3) await initWeb3();
-                    
-                    const accounts = await web3.eth.getAccounts();
-                    userAddress = accounts.length > 0 ? accounts[0] : (await web3.eth.requestAccounts())[0];
-                    
-                    walletInput.value = userAddress;
-                    walletInput.readOnly = true;
-                    localStorage.setItem('slf_wallet', userAddress);
-                    localStorage.setItem('wallet_source', 'metamask');
-                    isManualMode = false;
-                    
-                    console.log("Успешно подключено через MetaMask, адрес:", userAddress);
-                    updateUI();
-                    await loadData();
-                    return;
-                } catch (error) {
-                    console.error("Ошибка подключения MetaMask:", error);
+            try {
+                if (!web3) {
+                    if (!await initWeb3()) {
+                        alert(translations[currentLang].noProvider);
+                        return;
+                    }
                 }
+        
+                const accounts = await web3.eth.getAccounts();
+                userAddress = accounts[0] || (await web3.eth.requestAccounts())[0];
+                
+                document.getElementById('walletAddress').value = userAddress;
+                localStorage.setItem('slf_wallet', userAddress);
+                
+                updateUI();
+                startDataRefresh(); // Теперь refreshInterval определён
+                
+            } catch (error) {
+                console.error('Wallet connection error:', error);
+                alert(translations[currentLang].connectionFailed);
             }
-            
-            // 2. Режим ручного ввода
-            console.log("Активация ручного режима для адреса:", manualAddress);
-            userAddress = manualAddress;
-            localStorage.setItem('slf_wallet', userAddress);
-            localStorage.setItem('wallet_source', 'manual');
-            isManualMode = true;
-            
-            // Инициализируем Web3, если еще не инициализирован
-            if (!web3) {
-                await initWeb3();
-            }
-            
-            updateUI();
-            alert(translations[currentLang].manualModeWarning);
-            await loadData();
         }
-
         async function loadData() {
             if (!web3 || !contract) {
                 console.error("Web3 или контракт не инициализированы");
@@ -528,6 +501,23 @@
             // Умножаем количество минимальных единиц на цену продажи за единицу
             const weiAmount = BigInt(tokenUnits) * BigInt(sellPricePerUnit);
             return weiAmount.toString();
+        }
+        function startDataRefresh() {
+            // Останавливаем предыдущий интервал, если был
+            stopDataRefresh();
+            
+            // Загружаем данные сразу
+            loadData();
+            
+            // Устанавливаем интервал обновления каждые 15 секунд
+            refreshInterval = setInterval(loadData, 15000);
+        }
+        
+        function stopDataRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
         }
         // Translations
         const translations = {
@@ -696,6 +686,7 @@
 
         // Disconnect wallet
         function disconnectWallet() {
+            stopDataRefresh();
             userAddress = '';
             localStorage.removeItem('slf_wallet');
             localStorage.removeItem('wallet_source');
