@@ -541,7 +541,7 @@
             const eth = web3.utils.fromWei(weiValue.toString(), 'ether');
             return parseFloat(eth).toLocaleString('en', {
                 minimumFractionDigits: 6,
-                maximumFractionDigits: 6,
+                maximumFractionDigits: 18,
                 useGrouping: false
             }) + ' ETH';
         }        
