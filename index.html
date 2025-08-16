@@ -359,41 +359,43 @@
         // ===== Основные функции =====
         
         async function initWeb3() {
+            console.log("Инициализация Web3...");
+            
             // 1. Пробуем Modern MetaMask
             if (window.ethereum) {
                 try {
                     web3 = new Web3(window.ethereum);
                     await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    console.log("Connected via MetaMask");
                     
                     // Настройка обработчиков событий
-                    window.ethereum.on('accountsChanged', (accounts) => {
-                        if (accounts.length > 0) {
-                            userAddress = accounts[0];
-                            localStorage.setItem('slf_wallet', userAddress);
-                            updateUI();
-                            loadData();
-                        } else {
-                            disconnectWallet();
-                        }
-                    });
+                    window.ethereum.on('disconnect', handleDisconnect);
+                    window.ethereum.on('accountsChanged', handleAccountsChanged);
                     
-                    window.ethereum.on('chainChanged', () => {
-                        window.location.reload();
-                    });
-                    
+                    console.log("Успешно подключено через MetaMask");
                     return true;
                 } catch (error) {
-                    console.error("MetaMask error:", error);
-                    return false;
+                    console.error("Ошибка MetaMask:", error);
                 }
             }
             
-            // 2. Fallback для других случаев
-            console.error("MetaMask not detected");
-            return false;
+            // 2. Fallback для публичных RPC (если нужно)
+            return await connectToPublicRPC();
         }
         
+        function handleDisconnect(error) {
+            console.log("MetaMask disconnected:", error);
+            disconnectWallet();
+        }
+        
+        function handleAccountsChanged(accounts) {
+            if (accounts.length === 0) {
+                disconnectWallet();
+            } else {
+                userAddress = accounts[0];
+                localStorage.setItem('slf_wallet', userAddress);
+                loadData();
+            }
+        }        
         async function connectWallet() {
             try {
                 // Инициализация Web3
@@ -481,8 +483,10 @@
         
         function startDataRefresh() {
             stopDataRefresh();
-            loadData(); // Немедленная загрузка
-            refreshInterval = setInterval(loadData, 15000); // Обновление каждые 15 сек
+            loadData().catch(console.error);
+            refreshInterval = setInterval(() => {
+                loadData().catch(console.error);
+            }, 15000);
         }
         
         function stopDataRefresh() {
@@ -490,8 +494,7 @@
                 clearInterval(refreshInterval);
                 refreshInterval = null;
             }
-        }
-        
+        }        
         function updateUI() {
             document.getElementById('connectWallet').classList.add('hidden');
             document.getElementById('disconnectWallet').classList.remove('hidden');
@@ -639,7 +642,7 @@
             if (window.ethereum) {
                 try {
                     web3 = new Web3(window.ethereum);
-                    await window.ethereum.enable();
+                    await window.ethereum.request({ method: 'eth_requestAccounts' });
                     console.log("Успешно подключено через MetaMask");
                     return true;
                 } catch (error) {
@@ -780,71 +783,70 @@
             }
         }
 
-        // Новая функция для расчета ETH при продаже (будет вызываться при загрузке данных)
-        function updateSellCalculation() {
-            if (!web3 || !contract || !userAddress) return;
-            
+        async function updateSellCalculation() {
             try {
-                const tokenBalanceElement = document.getElementById('tokenBalance');
-                const tokenBalance = parseFloat(tokenBalanceElement.textContent);
+                // 1. Получаем баланс токенов в минимальных единицах
+                const tokenBalanceUnits = await contract.methods.balanceOf(userAddress).call();
                 
-                if (isNaN(tokenBalance) || tokenBalance <= 0) return;
+                // 2. Получаем цену продажи за минимальную единицу
+                const sellPricePerUnit = await contract.methods.bidnow().call();
                 
-                // Получаем цену продажи (за 1 минимальную единицу)
-                const sellPriceText = document.getElementById('sellPrice').textContent;
-                const sellPricePerUnit = parseFloat(sellPriceText.split(' ')[0]);
+                // 3. Конвертируем в BigInt для точных расчетов
+                const units = BigInt(tokenBalanceUnits);
+                const price = BigInt(sellPricePerUnit);
                 
-                if (!isNaN(sellPricePerUnit)) {
-                    // Конвертируем токены в минимальные единицы
-                    const units = tokenBalance * 1000000;
-                    
-                    // Рассчитываем сумму в wei
-                    const weiAmount = units * sellPricePerUnit;
-                    
-                    // Конвертируем wei в ETH
-                    const ethAmount = web3.utils.fromWei(weiAmount.toString(), 'ether');
-                    
-                    document.getElementById('receiveEth').textContent = parseFloat(ethAmount).toFixed(6) + ' ETH';
-                }
+                // 4. Вычисляем сумму в wei (1 SLF = 1e6 единиц)
+                const sellValueWei = (units * price) / BigInt(1e6);
+                
+                // 5. Конвертируем в ETH (безопасный метод)
+                const sellValueEth = web3.utils.fromWei(sellValueWei.toString(), 'ether');
+                
+                // 6. Форматируем вывод
+                const formattedValue = Number(sellValueEth).toFixed(6);
+                
+                document.getElementById('receiveEth').textContent = formattedValue + ' ETH';
+                document.getElementById('ethValue').textContent = formattedValue + ' ETH';
+                
             } catch (error) {
                 console.error('Sell calculation error:', error);
             }
         }
 
-        // Обновляем функцию loadData()
         async function loadData() {
-            if (!contract || !userAddress) return;
+            if (!web3 || !contract || !userAddress) return;
             
             try {
-                const [buyPricePerUnit, sellPricePerUnit, tokenBalanceUnits] = await Promise.all([
+                // Параллельное получение данных
+                const [buyPrice, sellPrice, tokenBalance] = await Promise.all([
                     contract.methods.asknow().call(),
                     contract.methods.bidnow().call(),
                     contract.methods.balanceOf(userAddress).call()
                 ]);
                 
-                // Форматируем цены (за 1 минимальную единицу)
-                document.getElementById('buyPrice').textContent = formatETH(buyPricePerUnit);
-                document.getElementById('sellPrice').textContent = formatETH(sellPricePerUnit);
+                // Обновление цен
+                document.getElementById('buyPrice').textContent = 
+                    formatEthValue(buyPrice);
+                document.getElementById('sellPrice').textContent = 
+                    formatEthValue(sellPrice);
                 
-                // Конвертируем баланс из минимальных единиц в токены
-                const tokenBalance = tokenBalanceUnits / 1000000;
-                document.getElementById('tokenBalance').textContent = tokenBalance.toFixed(6);
+                // Обновление баланса токенов
+                document.getElementById('tokenBalance').textContent = 
+                    (tokenBalance / 1e6).toFixed(6);
                 
-                // Обновляем расчет ETH при продаже
-                updateSellCalculation();
+                // Расчет выручки
+                await updateSellCalculation();
                 
-                // Обновляем расчет токенов при покупке (если есть введенное значение)
-                updateTokenCalculation();
             } catch (error) {
                 console.error('Error loading data:', error);
             }
         }
-
-        // Модифицированная функция formatETH для отображения цен
-        function formatETH(value) {
-            if (!web3) return "0 ETH";
-            const ethValue = web3.utils.fromWei(value.toString(), 'ether');
-            return parseFloat(ethValue).toFixed(18) + ' ETH'; // Показываем полную точность
+        
+        function formatEthValue(weiValue) {
+            try {
+                return Number(web3.utils.fromWei(weiValue.toString(), 'ether')).toFixed(6) + ' ETH';
+            } catch {
+                return '0 ETH';
+            }
         }
 
         // Buy tokens
