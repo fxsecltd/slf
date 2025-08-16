@@ -731,34 +731,6 @@
             }
         }
         
-        async function loadData() {
-            if (!web3 || !contract || !userAddress) return;
-            
-            try {
-                // Параллельное получение данных
-                const [buyPrice, sellPrice, tokenBalance] = await Promise.all([
-                    contract.methods.asknow().call(),
-                    contract.methods.bidnow().call(),
-                    contract.methods.balanceOf(userAddress).call()
-                ]);
-                
-                // Обновление цен
-                document.getElementById('buyPrice').textContent = 
-                    formatEthValue(buyPrice);
-                document.getElementById('sellPrice').textContent = 
-                    formatEthValue(sellPrice);
-                
-                // Обновление баланса токенов
-                document.getElementById('tokenBalance').textContent = 
-                    (tokenBalance / 1e6).toFixed(6);
-                
-                // Расчет выручки
-                await updateSellCalculation();
-                
-            } catch (error) {
-                console.error('Error loading data:', error);
-            }
-        }
         
         function formatEthValue(weiValue) {
             try {
@@ -843,32 +815,6 @@
             setLanguage('ru');
         });
 
-        // Initialize on load
-        document.addEventListener('DOMContentLoaded', function() {
-            setLanguage(currentLang);
-            
-            const walletInput = document.getElementById('walletAddress');
-            if (userAddress) {
-                walletInput.value = userAddress;
-                if (localStorage.getItem('wallet_source') === 'metamask') {
-                    walletInput.readOnly = true;
-                }
-            }
-
-            if (localStorage.getItem('wallet_source') === 'metamask') {
-                setTimeout(async () => {
-                    if (window.ethereum || window.web3?.givenProvider) {
-                        await initWeb3();
-                        await connectWallet();
-                    }
-                }, 500);
-            }
-
-            // Input events
-            document.getElementById('buyEthAmount').addEventListener('input', updateTokenCalculation);
-            document.getElementById('connectWallet').addEventListener('click', connectWallet);
-            document.getElementById('disconnectWallet').addEventListener('click', disconnectWallet);
-        });
     </script>
 </body>
 </html>
