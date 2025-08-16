@@ -668,8 +668,10 @@
             
             try {
                 const ethAmount = parseFloat(ethInput.value);
+                console.log("eth amount:"+ethAmount);
                 if (isNaN(ethAmount)) {
                     tokenInput.value = '';
+                    console.log("eth amount is NaN");
                     return;
                 }
         
@@ -677,7 +679,6 @@
                 const buyPricePerUnit = parseFloat(buyPriceText.split(' ')[0]);
                 
                 if (!isNaN(buyPricePerUnit)) {
-                    // Правильный расчет без лишнего деления
                     const tokens = calculateTokenAmount(ethAmount, buyPricePerUnit);
                     tokenInput.value = formatTokenDisplay(tokens);
                 }
@@ -694,6 +695,7 @@
             try {
                 // Получаем введенное количество токенов
                 const tokenAmount = parseFloat(tokenInput.value);
+                console.log("token amount:"+tokenAmount);
                 if (isNaN(tokenAmount)) {
                     ethInput.value = '';
                     return;
