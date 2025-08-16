@@ -457,7 +457,7 @@
         
             // Расчет выручки
             await calculateSellValue();
-        
+            updateTokenCalculation();        
           } catch (error) {
             console.error('Error loading data:', error);
           }
@@ -539,7 +539,78 @@
             // Назначение обработчиков
             document.getElementById('connectWallet').addEventListener('click', connectWallet);
             document.getElementById('disconnectWallet').addEventListener('click', disconnectWallet);
+            document.getElementById('buyEthAmount').addEventListener('input', updateTokenCalculation);
+            document.getElementById('buyTokenAmount').addEventListener('input', updateEthCalculation);
         });
+
+        function updateEthCalculation() {
+            const ethInput = document.getElementById('buyEthAmount');
+            const tokenInput = document.getElementById('buyTokenAmount');
+            
+            if (!tokenInput.value || !web3 || !contract) {
+                ethInput.value = '';
+                return;
+            }
+        
+            try {
+                const tokenAmount = parseFloat(tokenInput.value);
+                if (isNaN(tokenAmount)) return;
+        
+                // Получаем текущую цену покупки (за 1 минимальную единицу)
+                const buyPriceText = document.getElementById('buyPrice').textContent;
+                const buyPricePerUnit = parseFloat(buyPriceText.split(' ')[0]);
+        
+                if (!isNaN(buyPricePerUnit)) {
+                    // Конвертируем токены в минимальные единицы
+                    const units = tokenAmount * 1000000;
+                    
+                    // Рассчитываем сумму в wei
+                    const weiAmount = units * buyPricePerUnit;
+                    
+                    // Конвертируем wei в ETH
+                    const ethAmount = web3.utils.fromWei(weiAmount.toString(), 'ether');
+                    
+                    ethInput.value = parseFloat(ethAmount).toFixed(6);
+                }
+            } catch (error) {
+                console.error('Calculation error:', error);
+            }
+        }        
+        
+        function updateTokenCalculation() {
+            const ethInput = document.getElementById('buyEthAmount');
+            const tokenInput = document.getElementById('buyTokenAmount');
+            
+            if (!ethInput.value || !web3 || !contract) {
+                tokenInput.value = '';
+                return;
+            }
+        
+            try {
+                const ethAmount = parseFloat(ethInput.value);
+                if (isNaN(ethAmount) return;
+        
+                // Получаем текущую цену покупки (за 1 минимальную единицу)
+                const buyPriceText = document.getElementById('buyPrice').textContent;
+                const buyPricePerUnit = parseFloat(buyPriceText.split(' ')[0]);
+        
+                if (!isNaN(buyPricePerUnit) {
+                    // Конвертируем ETH в wei
+                    const ethInWei = web3.utils.toWei(ethAmount.toString(), 'ether');
+                    
+                    // Рассчитываем количество минимальных единиц
+                    const units = Math.floor(parseInt(ethInWei) / buyPricePerUnit);
+                    
+                    // Конвертируем в токены (делим на 10^6)
+                    const tokens = units / 1000000;
+                    
+                    tokenInput.value = tokens.toFixed(6);
+                }
+            } catch (error) {
+                console.error('Calculation error:', error);
+            }
+        }        
+        
         // Translations
         const translations = {
             en: {
@@ -680,37 +751,6 @@
             return web3.utils.fromWei(value.toString(), 'ether') + ' ETH';
         }
 
-        // Обновленная функция расчета количества токенов при покупке
-        function updateTokenCalculation() {
-            const buyEthInput = document.getElementById('buyEthAmount');
-            const buyTokenInput = document.getElementById('buyTokenAmount');
-            
-            if (!buyEthInput.value || !web3 || !contract) return;
-            
-            try {
-                const ethAmount = parseFloat(buyEthInput.value);
-                if (isNaN(ethAmount) || ethAmount <= 0) return;
-                
-                // Получаем цену покупки (за 1 минимальную единицу)
-                const buyPriceText = document.getElementById('buyPrice').textContent;
-                const buyPricePerUnit = parseFloat(buyPriceText.split(' ')[0]);
-                
-                if (!isNaN(buyPricePerUnit)) {
-                    // Конвертируем ETH в wei
-                    const ethInWei = web3.utils.toWei(ethAmount.toString(), 'ether');
-                    
-                    // Рассчитываем количество минимальных единиц (целое число)
-                    const units = Math.floor(parseInt(ethInWei) / buyPricePerUnit);
-                    
-                    // Конвертируем в токены (делим на 10^6)
-                    const tokens = units / 1000000;
-                    
-                    buyTokenInput.value = tokens.toFixed(6);
-                }
-            } catch (error) {
-                console.error('Calculation error:', error);
-            }
-        }
 
         async function updateSellCalculation() {
             try {
