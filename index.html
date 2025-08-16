@@ -781,17 +781,6 @@
             return valueWei.toString();
         }
         
-        // Функция для расчета количества токенов
-        function calculateTokenAmount(ethAmount, pricePerUnit) {
-            // ethAmount - сумма в ETH
-            // pricePerUnit - цена за 1 минимальную единицу в wei
-            
-            const ethInWei = web3.utils.toWei(ethAmount.toString(), 'ether');
-            // Делим только на pricePerUnit без лишнего деления
-            const units = BigInt(ethInWei) / BigInt(pricePerUnit);
-            return units.toString();
-        }        
-
         async function loadWalletBalance() {
             if (!web3 || !userAddress) {
                 console.error("Web3 or user address not initialized");
