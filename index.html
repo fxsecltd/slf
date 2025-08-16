@@ -350,14 +350,6 @@
         let refreshInterval = null;
         let isManualMode = false;
         
-        // Публичные RPC-провайдеры с CORS поддержкой
-        const RPC_PROVIDERS = [
-            "https://cloudflare-eth.com",
-            "https://rpc.ankr.com/eth",
-            "https://eth-mainnet.public.blastapi.io",
-            "https://ethereum.publicnode.com"
-        ];
-        
         // ===== Инициализация Web3 =====
         async function initWeb3() {
             console.log("Инициализация Web3...");
