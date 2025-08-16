@@ -12,7 +12,7 @@
       frame-src 'self' https://*.metamask.io;
     ">
     <title>Self Liquidity Farm</title>
-    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
     <style>
         :root {
             --primary: #4e44ce;
@@ -361,10 +361,16 @@
         async function initWeb3() {
             console.log("Initializing Web3...");
             
-            // 1. Пробуем Modern MetaMask
+            // 1. Modern MetaMask detection
             if (window.ethereum) {
                 try {
-                    web3 = new Web3(window.ethereum);
+                    // Создаем экземпляр Web3 без немедленного подключения
+                    web3 = new Web3();
+                    
+                    // Устанавливаем провайдер после создания экземпляра
+                    web3.setProvider(window.ethereum);
+                    
+                    // Современный метод запроса аккаунтов
                     await window.ethereum.request({ method: 'eth_requestAccounts' });
                     
                     // Настройка обработчиков событий
@@ -375,6 +381,7 @@
                     return true;
                 } catch (error) {
                     console.error("MetaMask error:", error);
+                    return false;
                 }
             }
             
@@ -396,8 +403,7 @@
                 localStorage.setItem('slf_wallet', userAddress);
                 loadData();
             }
-        }        
-
+        }
         async function connectWallet() {
             try {
                 // Инициализация Web3
