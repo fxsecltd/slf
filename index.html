@@ -341,20 +341,180 @@
             "https://eth-mainnet.g.alchemy.com/v2/demo"
         ];
 
-        // Глобальные переменные (в начале файла)
+        // ===== Глобальные переменные =====
         let web3;
         let contract;
         let userAddress = localStorage.getItem('slf_wallet') || '';
         let currentLang = localStorage.getItem('slf_lang') || 'en';
-        let refreshInterval = null; // Добавляем эту строку        // Глобальные переменные
-        let currentProviderIndex = 0;
+        let refreshInterval = null;
         let isManualMode = false;
-
-        // Инициализация при загрузке страницы
+        
+        // Публичные RPC-провайдеры с CORS поддержкой
+        const RPC_PROVIDERS = [
+            "https://cloudflare-eth.com",
+            "https://rpc.ankr.com/eth",
+            "https://eth-mainnet.public.blastapi.io",
+            "https://ethereum.publicnode.com"
+        ];
+        
+        // ===== Инициализация Web3 =====
+        async function initWeb3() {
+            console.log("Инициализация Web3...");
+            
+            // 1. Пробуем Modern MetaMask
+            if (window.ethereum) {
+                try {
+                    web3 = new Web3(window.ethereum);
+                    await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    console.log("Успешно подключено через MetaMask");
+                    setupMetaMaskListeners();
+                    return true;
+                } catch (error) {
+                    console.error("Ошибка MetaMask:", error);
+                    // Продолжаем пробовать другие варианты
+                }
+            }
+            
+            // 2. Пробуем Legacy Web3 (старые версии MetaMask)
+            if (window.web3?.givenProvider) {
+                try {
+                    web3 = new Web3(window.web3.givenProvider);
+                    console.log("Успешно подключено через Legacy Web3");
+                    return true;
+                } catch (error) {
+                    console.error("Ошибка Legacy Web3:", error);
+                }
+            }
+            
+            // 3. Пробуем публичные RPC ноды
+            console.log("Пробуем подключиться через публичные RPC...");
+            for (const providerUrl of RPC_PROVIDERS) {
+                try {
+                    const provider = new Web3.providers.HttpProvider(providerUrl);
+                    const testWeb3 = new Web3(provider);
+                    // Проверяем соединение
+                    await testWeb3.eth.getBlockNumber();
+                    web3 = testWeb3;
+                    console.log("Успешно подключено через RPC:", providerUrl);
+                    isManualMode = true;
+                    return true;
+                } catch (error) {
+                    console.error(`Ошибка подключения к ${providerUrl}:`, error);
+                }
+            }
+            
+            console.error("Все провайдеры недоступны");
+            alert("Не удалось подключиться к Ethereum сети. Установите MetaMask или попробуйте позже.");
+            return false;
+        }
+        
+        // ===== Подключение кошелька =====
+        async function connectWallet() {
+            const walletInput = document.getElementById('walletAddress');
+            const manualAddress = walletInput.value.trim();
+            
+            try {
+                // Режим MetaMask
+                if (window.ethereum || window.web3?.givenProvider) {
+                    if (!web3) await initWeb3();
+                    
+                    const accounts = await web3.eth.getAccounts();
+                    userAddress = accounts[0] || (await web3.eth.requestAccounts())[0];
+                    
+                    walletInput.value = userAddress;
+                    walletInput.readOnly = true;
+                    localStorage.setItem('slf_wallet', userAddress);
+                    localStorage.setItem('wallet_source', 'metamask');
+                    isManualMode = false;
+                    
+                    updateUI();
+                    startDataRefresh();
+                    return;
+                }
+                
+                // Ручной режим (без MetaMask)
+                if (!isValidAddress(manualAddress)) {
+                    alert(translations[currentLang].invalidAddress);
+                    return;
+                }
+                
+                if (!web3) await initWeb3();
+                if (!web3) return;
+                
+                userAddress = manualAddress;
+                localStorage.setItem('slf_wallet', userAddress);
+                localStorage.setItem('wallet_source', 'manual');
+                isManualMode = true;
+                
+                updateUI();
+                alert(translations[currentLang].manualModeWarning);
+                await loadData();
+                
+            } catch (error) {
+                console.error('Ошибка подключения:', error);
+                alert(translations[currentLang].connectionFailed);
+            }
+        }
+        
+        // ===== Загрузка данных =====
+        async function loadData() {
+            if (!web3 || !userAddress) return;
+            
+            try {
+                // Для ручного режима получаем только цены
+                const promises = [
+                    contract.methods.asknow().call(),
+                    contract.methods.bidnow().call()
+                ];
+                
+                if (!isManualMode) {
+                    promises.push(contract.methods.balanceOf(userAddress).call());
+                    promises.push(web3.eth.getBalance(userAddress));
+                }
+                
+                const [buyPrice, sellPrice, tokenBalance, ethBalance] = await Promise.all(promises);
+                
+                // Обновляем цены
+                document.getElementById('buyPrice').textContent = formatETH(buyPrice);
+                document.getElementById('sellPrice').textContent = formatETH(sellPrice);
+                
+                // Обновляем балансы (только для MetaMask)
+                if (!isManualMode) {
+                    const tokenBalanceFormatted = (tokenBalance / 1e6).toFixed(6);
+                    document.getElementById('tokenBalance').textContent = tokenBalanceFormatted;
+                    document.getElementById('walletEthBalance').textContent = web3.utils.fromWei(ethBalance, 'ether') + ' ETH';
+                    
+                    // Расчет выручки при продаже
+                    const sellValueWei = BigInt(tokenBalance) * BigInt(sellPrice) / BigInt(1e6);
+                    const sellValueEth = web3.utils.fromWei(sellValueWei.toString(), 'ether');
+                    document.getElementById('ethValue').textContent = sellValueEth + ' ETH';
+                    document.getElementById('receiveEth').textContent = sellValueEth + ' ETH';
+                }
+                
+            } catch (error) {
+                console.error('Ошибка загрузки данных:', error);
+                if (!isManualMode) {
+                    alert("Ошибка получения данных. Попробуйте переподключиться.");
+                }
+            }
+        }
+        
+        // ===== Вспомогательные функции =====
+        function isValidAddress(address) {
+            return /^0x[a-fA-F0-9]{40}$/.test(address);
+        }
+        
+        function formatETH(value) {
+            if (!web3) return "0 ETH";
+            return parseFloat(web3.utils.fromWei(value.toString(), 'ether')).toFixed(6) + ' ETH';
+        }
+        
+        // ===== Инициализация при загрузке =====
         document.addEventListener('DOMContentLoaded', async function() {
             console.log("Страница загружена, начинаем инициализацию...");
+            setLanguage(currentLang);
             
-            // Восстанавливаем сохраненный адрес
+            // Восстановление сохраненного адреса
             const walletInput = document.getElementById('walletAddress');
             if (userAddress) {
                 walletInput.value = userAddress;
@@ -362,163 +522,14 @@
                     walletInput.readOnly = true;
                 }
             }
-
-            // Пробуем автоматическое подключение
-            await initWeb3();
             
-            // Если есть сохраненный адрес, загружаем данные
-            if (userAddress) {
-                console.log("Обнаружен сохраненный адрес, загружаем данные...");
-                await loadData();
+            // Автоподключение для MetaMask
+            if (localStorage.getItem('wallet_source') === 'metamask') {
+                if (await initWeb3()) {
+                    await connectWallet();
+                }
             }
         });
-
-        async function initWeb3() {
-            console.log("Инициализация Web3...");
-            
-            // 1. Пробуем браузерный провайдер (MetaMask)
-            if (window.ethereum) {
-                try {
-                    web3 = new Web3(window.ethereum);
-                    await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    console.log("Успешно подключено через MetaMask");
-                    return true;
-                } catch (error) {
-                    console.error("Ошибка MetaMask:", error);
-                }
-            }
-            
-            // 2. Пробуем публичные RPC
-            const rpcConnected = await connectToPublicRPC();
-            if (!rpcConnected) {
-                alert("Не удалось подключиться к Ethereum сети. Пожалуйста, установите MetaMask или попробуйте позже.");
-                return false;
-            }
-            return true;
-        }
-
-        async function connectToPublicRPC() {
-            console.log("Попытка подключения к публичным RPC...");
-            
-            for (let i = 0; i < RPC_PROVIDERS.length; i++) {
-                const providerUrl = RPC_PROVIDERS[i];
-                try {
-                    console.log(`Пробуем RPC: ${providerUrl}`);
-                    const provider = new Web3.providers.HttpProvider(providerUrl, {
-                        timeout: 5000 // 5 секунд таймаут
-                    });
-                    const testWeb3 = new Web3(provider);
-                    
-                    // Тестовый запрос с таймаутом
-                    const blockNumber = await Promise.race([
-                        testWeb3.eth.getBlockNumber(),
-                        new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('Timeout')), 5000)
-                    )]);
-                    
-                    console.log(`Успешно подключено к ${providerUrl}, номер блока: ${blockNumber}`);
-                    web3 = testWeb3;
-                    contract = new web3.eth.Contract(contractABI, contractAddress);
-                    return true;
-                } catch (error) {
-                    console.error(`Ошибка подключения к ${providerUrl}:`, error.message);
-                    if (i === RPC_PROVIDERS.length - 1) {
-                        console.error("Все RPC провайдеры недоступны");
-                        return false;
-                    }
-                }
-            }
-        }
-
-        // Подключение кошелька
-        async function connectWallet() {
-            try {
-                if (!web3) {
-                    if (!await initWeb3()) {
-                        alert(translations[currentLang].noProvider);
-                        return;
-                    }
-                }
-        
-                const accounts = await web3.eth.getAccounts();
-                userAddress = accounts[0] || (await web3.eth.requestAccounts())[0];
-                
-                document.getElementById('walletAddress').value = userAddress;
-                localStorage.setItem('slf_wallet', userAddress);
-                
-                updateUI();
-                startDataRefresh(); // Теперь refreshInterval определён
-                
-            } catch (error) {
-                console.error('Wallet connection error:', error);
-                alert(translations[currentLang].connectionFailed);
-            }
-        }
-        async function loadData() {
-            if (!web3 || !contract) {
-                console.error("Web3 или контракт не инициализированы");
-                return;
-            }
-
-            try {
-                // 1. Баланс ETH
-                console.error("Запрос баланса эфириума");
-                const ethBalance = await web3.eth.getBalance(userAddress);
-                document.getElementById('walletEthBalance').textContent = 
-                    web3.utils.fromWei(ethBalance, 'ether') + ' ETH';
-                
-                // 2. Баланс токенов
-                console.error("Запрос баланса токенов");
-                const tokenBalance = await contract.methods.balanceOf(userAddress).call();
-                document.getElementById('tokenBalance').textContent = 
-                    (tokenBalance / 1e6).toFixed(6);
-                
-                // 3. Цены
-                console.error("Запрос текущих цен");
-                const [buyPrice, sellPrice] = await Promise.all([
-                    contract.methods.asknow().call(),
-                    contract.methods.bidnow().call()
-                ]);
-                
-                document.getElementById('buyPrice').textContent = 
-                    web3.utils.fromWei(buyPrice, 'ether') + ' ETH';
-                document.getElementById('sellPrice').textContent = 
-                    web3.utils.fromWei(sellPrice, 'ether') + ' ETH';
-                    
-                // 4. Расчет выручки
-                console.error("Расчет текущей стоимости при продаже");
-                const sellValue = (BigInt(tokenBalance) * BigInt(sellPrice)) / BigInt(1e6);
-                document.getElementById('ethValue').textContent = 
-                    web3.utils.fromWei(sellValue.toString(), 'ether') + ' ETH';
-                    
-            } catch (error) {
-                console.error("Ошибка загрузки данных:", error);
-                alert("Ошибка получения данных. Подробности в консоли.");
-            }
-        }
-        // Функция расчета суммы при продаже
-        function calculateSellValue(tokenUnits, sellPricePerUnit) {
-            // Умножаем количество минимальных единиц на цену продажи за единицу
-            const weiAmount = BigInt(tokenUnits) * BigInt(sellPricePerUnit);
-            return weiAmount.toString();
-        }
-        function startDataRefresh() {
-            // Останавливаем предыдущий интервал, если был
-            stopDataRefresh();
-            
-            // Загружаем данные сразу
-            loadData();
-            
-            // Устанавливаем интервал обновления каждые 15 секунд
-            refreshInterval = setInterval(loadData, 15000);
-        }
-        
-        function stopDataRefresh() {
-            if (refreshInterval) {
-                clearInterval(refreshInterval);
-                refreshInterval = null;
-            }
-        }
         // Translations
         const translations = {
             en: {
