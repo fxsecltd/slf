@@ -458,6 +458,7 @@
             // Расчет выручки
             await calculateSellValue();
             updateTokenCalculation();        
+            document.getElementById('walletEthBalance').textContent = formatEth(ethBalance);              
           } catch (error) {
             console.error('Error loading data:', error);
           }
@@ -570,7 +571,11 @@
                     // Конвертируем wei в ETH
                     const ethAmount = web3.utils.fromWei(weiAmount.toString(), 'ether');
                     
-                    ethInput.value = parseFloat(ethAmount).toFixed(6);
+                    ethInput.value = parseFloat(ethAmount).toLocaleString('en', {
+                        minimumFractionDigits: 6,
+                        maximumFractionDigits: 6,
+                        useGrouping: false
+                    });
                 }
             } catch (error) {
                 console.error('Calculation error:', error);
@@ -604,7 +609,11 @@
                     // Конвертируем в токены (делим на 10^6)
                     const tokens = units / 1000000;
                     
-                    tokenInput.value = tokens.toFixed(6);
+                    tokenInput.value = parseFloat(tokens.toFixed(6)).toLocaleString('en', {
+                        minimumFractionDigits: 6,
+                        maximumFractionDigits: 6,
+                        useGrouping: false
+                    });
                 }
             } catch (error) {
                 console.error('Calculation error:', error);
@@ -746,11 +755,21 @@
         }
 
         // Format ETH values
-        function formatETH(value) {
+        function formatEth(weiValue) {
             if (!web3) return "0 ETH";
-            return web3.utils.fromWei(value.toString(), 'ether') + ' ETH';
+            
+            // Конвертируем wei в ETH
+            const ethValue = web3.utils.fromWei(weiValue.toString(), 'ether');
+            
+            // Форматируем без научной нотации
+            const formatted = parseFloat(ethValue).toLocaleString('en', {
+                minimumFractionDigits: 6,
+                maximumFractionDigits: 6,
+                useGrouping: false
+            });
+            
+            return formatted + ' ETH';
         }
-
 
         async function updateSellCalculation() {
             try {
@@ -763,7 +782,7 @@
                 
                 // Форматирование вывода
                 document.getElementById('receiveEth').textContent = 
-                    parseFloat(ethValue).toFixed(6) + ' ETH';
+                    formatEth(sellValueWei);
                 document.getElementById('ethValue').textContent = 
                     parseFloat(ethValue).toFixed(6) + ' ETH';
             } catch (error) {
