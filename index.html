@@ -359,32 +359,30 @@
         // ===== Основные функции =====
         
         async function initWeb3() {
-            console.log("Инициализация Web3...");
-            
-            // 1. Пробуем Modern MetaMask
+            // 1. Проверяем Modern MetaMask
             if (window.ethereum) {
                 try {
                     web3 = new Web3(window.ethereum);
                     await window.ethereum.request({ method: 'eth_requestAccounts' });
                     
-                    // Настройка обработчиков событий
+                    // Правильные обработчики событий
                     window.ethereum.on('disconnect', handleDisconnect);
                     window.ethereum.on('accountsChanged', handleAccountsChanged);
                     
-                    console.log("Успешно подключено через MetaMask");
+                    console.log("Connected via MetaMask");
                     return true;
                 } catch (error) {
-                    console.error("Ошибка MetaMask:", error);
+                    console.error("MetaMask error:", error);
                 }
             }
             
-            // 2. Fallback для публичных RPC (если нужно)
+            // 2. Fallback для публичных RPC
             return await connectToPublicRPC();
         }
         
         function handleDisconnect(error) {
-            console.log("MetaMask disconnected:", error);
-            disconnectWallet();
+            console.log("Disconnected:", error);
+            stopDataRefresh();
         }
         
         function handleAccountsChanged(accounts) {
@@ -392,10 +390,10 @@
                 disconnectWallet();
             } else {
                 userAddress = accounts[0];
-                localStorage.setItem('slf_wallet', userAddress);
                 loadData();
             }
         }        
+
         async function connectWallet() {
             try {
                 // Инициализация Web3
@@ -635,75 +633,6 @@
             return /^0x[a-fA-F0-9]{40}$/.test(address);
         }
 
-        async function initWeb3() {
-            console.log("Инициализация Web3...");
-            
-            // 1. Пробуем браузерный провайдер (MetaMask)
-            if (window.ethereum) {
-                try {
-                    web3 = new Web3(window.ethereum);
-                    await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    console.log("Успешно подключено через MetaMask");
-                    return true;
-                } catch (error) {
-                    console.error("Ошибка MetaMask:", error);
-                }
-            }
-            
-            // 2. Пробуем Legacy Web3 (старые версии MetaMask)
-            if (window.web3?.givenProvider) {
-                try {
-                    web3 = new Web3(window.web3.givenProvider);
-                    console.log("Успешно подключено через Legacy Web3");
-                    return true;
-                } catch (error) {
-                    console.error("Ошибка Legacy Web3:", error);
-                }
-            }
-            
-            // 3. Пробуем публичные RPC
-            console.log("Браузерный провайдер не найден, пробуем публичные RPC");
-            return await connectToPublicRPC();
-        }
-
-        // Connect wallet
-        async function connectWallet() {
-            const walletInput = document.getElementById('walletAddress');
-            const manualAddress = walletInput.value.trim();
-
-            // MetaMask mode
-            if (window.ethereum || window.web3?.givenProvider) {
-                try {
-                    if (!web3) await initWeb3();
-                    
-                    const accounts = await web3.eth.getAccounts();
-                    userAddress = accounts.length > 0 ? accounts[0] : (await web3.eth.requestAccounts())[0];
-                    
-                    walletInput.value = userAddress;
-                    walletInput.readOnly = true;
-                    localStorage.setItem('slf_wallet', userAddress);
-                    localStorage.setItem('wallet_source', 'metamask');
-                    updateUI();
-                    startDataRefresh();
-                    return;
-                } catch (error) {
-                    console.error('MetaMask error:', error);
-                }
-            }
-
-            // Manual mode
-            if (isValidAddress(manualAddress)) {
-                userAddress = manualAddress;
-                localStorage.setItem('slf_wallet', userAddress);
-                localStorage.setItem('wallet_source', 'manual');
-                updateUI();
-                alert(translations[currentLang].manualModeWarning);
-                return;
-            }
-
-            alert(translations[currentLang].invalidAddress);
-        }
-
         // Disconnect wallet
         function disconnectWallet() {
             stopDataRefresh();
@@ -785,33 +714,23 @@
 
         async function updateSellCalculation() {
             try {
-                // 1. Получаем баланс токенов в минимальных единицах
-                const tokenBalanceUnits = await contract.methods.balanceOf(userAddress).call();
+                const tokenBalance = await contract.methods.balanceOf(userAddress).call();
+                const sellPrice = await contract.methods.bidnow().call();
                 
-                // 2. Получаем цену продажи за минимальную единицу
-                const sellPricePerUnit = await contract.methods.bidnow().call();
+                // Безопасные BigInt расчеты
+                const valueWei = (BigInt(tokenBalance) * BigInt(sellPrice)) / BigInt(1e6);
+                const ethValue = web3.utils.fromWei(valueWei.toString(), 'ether');
                 
-                // 3. Конвертируем в BigInt для точных расчетов
-                const units = BigInt(tokenBalanceUnits);
-                const price = BigInt(sellPricePerUnit);
-                
-                // 4. Вычисляем сумму в wei (1 SLF = 1e6 единиц)
-                const sellValueWei = (units * price) / BigInt(1e6);
-                
-                // 5. Конвертируем в ETH (безопасный метод)
-                const sellValueEth = web3.utils.fromWei(sellValueWei.toString(), 'ether');
-                
-                // 6. Форматируем вывод
-                const formattedValue = Number(sellValueEth).toFixed(6);
-                
-                document.getElementById('receiveEth').textContent = formattedValue + ' ETH';
-                document.getElementById('ethValue').textContent = formattedValue + ' ETH';
-                
+                // Форматирование вывода
+                document.getElementById('receiveEth').textContent = 
+                    parseFloat(ethValue).toFixed(6) + ' ETH';
+                document.getElementById('ethValue').textContent = 
+                    parseFloat(ethValue).toFixed(6) + ' ETH';
             } catch (error) {
-                console.error('Sell calculation error:', error);
+                console.error("Sell calc error:", error);
             }
         }
-
+        
         async function loadData() {
             if (!web3 || !contract || !userAddress) return;
             
