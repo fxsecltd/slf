@@ -670,39 +670,46 @@
             const ethInput = document.getElementById('buyEthAmount');
             const tokenInput = document.getElementById('buyTokenAmount');
             
+            // Сбрасываем значение, если поле ETH пустое
+            if (!ethInput.value.trim()) {
+                tokenInput.value = '';
+                return;
+            }
+        
             try {
-                // 1. Получаем введенное значение ETH
+                // Парсим значение ETH
                 const ethAmount = parseFloat(ethInput.value);
-                if (isNaN(ethAmount)) {
+                
+                // Проверка на валидность числа
+                if (isNaN(ethAmount) {
                     tokenInput.value = '';
                     return;
                 }
         
-                // 2. Получаем текущую цену покупки
+                // Получаем текущую цену
                 const buyPriceText = document.getElementById('buyPrice').textContent;
-                const buyPricePerUnit = parseFloat(buyPriceText.split(' ')[0]);
+                const priceParts = buyPriceText.split(' ');
+                const buyPricePerUnit = parseFloat(priceParts[0]);
                 
-                if (isNaN(buyPricePerUnit)) {
-                    console.error("Invalid buy price");
+                // Проверка цены на валидность
+                if (isNaN(buyPricePerUnit) {
+                    console.error("Invalid price value");
                     return;
                 }
         
-                // 3. Конвертируем ETH в минимальные единицы токена
+                // Расчет количества токенов
                 const ethInWei = web3.utils.toWei(ethAmount.toString(), 'ether');
                 const units = parseInt(ethInWei) / buyPricePerUnit;
+                const tokens = (units / 1e6).toFixed(6);
                 
-                // 4. Конвертируем в полные токены (1 SLF = 1e6 единиц)
-                const tokens = units / 1e6;
-                
-                // 5. Обновляем поле (максимум 6 знаков после запятой)
-                tokenInput.value = tokens.toFixed(6);
+                // Устанавливаем значение с проверкой
+                tokenInput.value = isNaN(tokens) ? '' : tokens;
                 
             } catch (error) {
-                console.error("Token calculation error:", error);
+                console.error("Calculation error:", error);
                 tokenInput.value = '';
             }
-        }
-        
+        }        
         // Translations
         const translations = {
             en: {
@@ -841,38 +848,48 @@
             const ethInput = document.getElementById('buyEthAmount');
             const tokenInput = document.getElementById('buyTokenAmount');
             
+            // Сбрасываем значение, если поле токенов пустое
+            if (!tokenInput.value.trim()) {
+                ethInput.value = '';
+                return;
+            }
+        
             try {
-                // 1. Получаем введенное количество токенов
+                // Парсим количество токенов
                 const tokenAmount = parseFloat(tokenInput.value);
+                
+                // Проверка на валидность числа
                 if (isNaN(tokenAmount)) {
                     ethInput.value = '';
                     return;
                 }
         
-                // 2. Получаем текущую цену покупки
+                // Получаем текущую цену
                 const buyPriceText = document.getElementById('buyPrice').textContent;
-                const buyPricePerUnit = parseFloat(buyPriceText.split(' ')[0]);
+                const priceParts = buyPriceText.split(' ');
+                const buyPricePerUnit = parseFloat(priceParts[0]);
                 
+                // Проверка цены на валидность
                 if (isNaN(buyPricePerUnit)) {
-                    console.error("Invalid buy price");
+                    console.error("Invalid price value");
                     return;
                 }
         
-                // 3. Конвертируем токены в минимальные единицы
+                // Расчет суммы в ETH
                 const units = tokenAmount * 1e6;
-                
-                // 4. Рассчитываем сумму в ETH
                 const weiAmount = units * buyPricePerUnit;
                 const ethAmount = web3.utils.fromWei(weiAmount.toString(), 'ether');
+                const formattedEth = parseFloat(ethAmount).toFixed(6);
                 
-                // 5. Обновляем поле (максимум 6 знаков после запятой)
-                ethInput.value = parseFloat(ethAmount).toFixed(6);
+                // Устанавливаем значение с проверкой
+                ethInput.value = isNaN(formattedEth) ? '' : formattedEth;
                 
             } catch (error) {
-                console.error("ETH calculation error:", error);
+                console.error("Calculation error:", error);
                 ethInput.value = '';
             }
         }
+        
         function formatEthValue(weiValue) {
             try {
                 return Number(web3.utils.fromWei(weiValue.toString(), 'ether')).toFixed(6) + ' ETH';
