@@ -663,15 +663,11 @@
         });
 
         function calculateTokenAmount(ethAmount, buyPricePerUnit) {
-            // Конвертируем ETH в wei (1 ETH = 1e18 wei)
-            const ethInWei = ethAmount * 1e18;
-            
-            // Рассчитываем количество микротокенов (0.000001 SLF)
-            const microTokens = ethInWei / buyPricePerUnit;
-            
-            // Конвертируем микротокены в полные токены (decimals=6)
-            return microTokens / 1e6;
-        }
+            // Полностью избегаем BigInt для дробных чисел
+            const ethInWei = ethAmount * 1e18;  // 1 ETH = 1e18 wei
+            const microTokens = ethInWei / buyPricePerUnit;  // Количество микротокенов
+            return microTokens / 1e6;  // Конвертируем в полные токены (decimals=6)
+        }        
         
         function updateTokenCalculation() {
             const ethInput = document.getElementById('buyEthAmount');
@@ -681,7 +677,7 @@
                 const ethAmount = parseFloat(ethInput.value);
                 
                 // Проверка на валидность ввода
-                if (isNaN(ethAmount)) {
+                if (isNaN(ethAmount) || ethAmount <= 0) {
                     tokenInput.value = '';
                     return;
                 }
@@ -689,15 +685,9 @@
                 const buyPriceText = document.getElementById('buyPrice').textContent;
                 const buyPricePerUnit = parseFloat(buyPriceText.split(' ')[0]);
                 
-                // Дополнительная проверка на минимальное значение
-                if (isNaN(buyPricePerUnit) || buyPricePerUnit <= 0) {
-                    tokenInput.value = '';
-                    return;
-                }
-                
-                // Минимальный порог для ввода ETH
-                const minEthAmount = (buyPricePerUnit / 1e18) * 1e6; // Стоимость 1 токена в ETH
-                if (ethAmount < minEthAmount) {
+                // Проверка минимальной суммы
+                const minEth = buyPricePerUnit / 1e24;  // Минимальная сумма в ETH
+                if (ethAmount < minEth) {
                     tokenInput.value = '0.000000';
                     return;
                 }
@@ -709,8 +699,7 @@
                 console.error('Token calculation error:', error);
                 tokenInput.value = '';
             }
-        }
-        
+        }        
         function updateEthCalculation() {
             const ethInput = document.getElementById('buyEthAmount');
             const tokenInput = document.getElementById('buyTokenAmount');
