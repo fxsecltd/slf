@@ -662,7 +662,7 @@
             const price = BigInt(buyPricePerUnit);
             
             // Рассчитываем количество микротокенов (0.000001 SLF)
-            const microTokens = (ethInWei * 1e6n) / price;
+            const microTokens = (ethInWei * 1e6) / price;
             
             // Конвертируем в полные токены (делим на 1e6)
             return Number(microTokens) / 1e6;
