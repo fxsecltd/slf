@@ -491,30 +491,31 @@
             if (!web3 || !contract || !userAddress) return;
         
             try {
-                const [buyPrice, sellPrice, tokenBalance] = await Promise.all([
+                // Параллельное получение всех данных
+                const [buyPrice, sellPrice, tokenBalance, ethBalance] = await Promise.all([
                     contract.methods.asknow().call(),
                     contract.methods.bidnow().call(),
-                    contract.methods.balanceOf(userAddress).call()
+                    contract.methods.balanceOf(userAddress).call(),
+                    web3.eth.getBalance(userAddress) // Добавляем получение баланса ETH
                 ]);
         
-                // Обновляем цены (18 знаков)
+                // Обновляем цены
                 document.getElementById('buyPrice').textContent = formatFullPrecision(buyPrice);
                 document.getElementById('sellPrice').textContent = formatFullPrecision(sellPrice);
         
-                // Отображаем баланс токенов (формат: 123.456000)
-                const tokenAmount = (BigInt(tokenBalance) / BigInt(1e6)).toString();
-                document.getElementById('tokenBalance').textContent = formatTokenDisplay(tokenAmount);
+                // Обновляем баланс токенов
+                document.getElementById('tokenBalance').textContent = formatTokenAmount(tokenBalance);
         
-                // Расчет стоимости в ETH (без лишнего умножения)
-                const ethValue = calculateTokenValue(tokenBalance, sellPrice);
-                document.getElementById('ethValue').textContent = formatFullPrecision(ethValue);
-                document.getElementById('receiveEth').textContent = formatFullPrecision(ethValue);
+                // Обновляем баланс ETH кошелька
+                document.getElementById('walletEthBalance').textContent = formatFullPrecision(ethBalance);
+        
+                // Расчет стоимости токенов
+                updateSellValue(tokenBalance, sellPrice);
                 
             } catch (error) {
                 console.error('Error loading data:', error);
             }
-        }
-        
+        }        
         function formatTokenDisplay(value) {
             // value - количество целых токенов
             return parseFloat(value).toLocaleString('en', {
@@ -685,27 +686,23 @@
         }
 
         function formatFullPrecision(weiValue) {
-            if (!web3) return "0.000000000000000000 ETH";
+            if (!web3 || !weiValue) return "0.000000000000000000 ETH";
             
             try {
                 const ethValue = web3.utils.fromWei(weiValue.toString(), 'ether');
                 const [integerPart, fractionalPart] = ethValue.split('.');
                 const fullFraction = (fractionalPart || '').padEnd(18, '0').substring(0, 18);
                 return `${integerPart}.${fullFraction} ETH`;
-            } catch {
+            } catch (error) {
+                console.error("Formatting error:", error);
                 return "0.000000000000000000 ETH";
             }
         }
-        // Для отображения балансов токенов (6 знаков)
-        function formatTokenAmount(value) {
-            const num = Number(value) / 1e6; // Учитываем 1e6 единиц на 1 токен
-            return num.toLocaleString('en', {
-                minimumFractionDigits: 6,
-                maximumFractionDigits: 6,
-                useGrouping: false
-            });
-        }
         
+        function formatTokenAmount(weiValue) {
+            const tokens = BigInt(weiValue) / BigInt(1e6);
+            return tokens.toString() + ".000000"; // Фиксированный формат с 6 нулями
+        }        
         // Для отображения ETH (18 знаков)
         function formatEthAmount(weiValue) {
             if (!web3) return "0.000000000000000000 ETH";
@@ -745,6 +742,31 @@
             // Делим только на pricePerUnit без лишнего деления
             const units = BigInt(ethInWei) / BigInt(pricePerUnit);
             return units.toString();
+        }        
+
+        async function loadWalletBalance() {
+            if (!web3 || !userAddress) {
+                console.error("Web3 or user address not initialized");
+                return;
+            }
+        
+            try {
+                // Получаем баланс в wei
+                const balanceWei = await web3.eth.getBalance(userAddress);
+                console.log("Raw ETH balance in wei:", balanceWei);
+                
+                // Конвертируем в ETH с полной точностью
+                const balanceEth = web3.utils.fromWei(balanceWei, 'ether');
+                
+                // Форматируем для отображения (18 знаков)
+                const formattedBalance = formatFullPrecision(balanceWei);
+                document.getElementById('walletEthBalance').textContent = formattedBalance;
+                
+                console.log("Formatted ETH balance:", formattedBalance);
+            } catch (error) {
+                console.error("Error loading ETH balance:", error);
+                document.getElementById('walletEthBalance').textContent = "0.000000000000000000 ETH";
+            }
         }        
         // Translations
         const translations = {
