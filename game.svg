@@ -1,0 +1,312 @@
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <script type="text/javascript">
+    <![CDATA[
+      // Переменные игры
+      var score = 0;
+      var gameRunning = false;
+      var balls = [];
+      var basketX = 350;
+      var basketSpeed = 8;
+      var gameTime = 30;
+      var timeLeft = gameTime;
+      var gameInterval, ballInterval, timerInterval;
+      
+      // Элементы SVG
+      var scoreText, timerText, gameOverText, basket, gameArea;
+      
+      // Инициализация игры
+      function initGame() {
+        // Получаем элементы
+        scoreText = document.getElementById("scoreText");
+        timerText = document.getElementById("timerText");
+        gameOverText = document.getElementById("gameOverText");
+        basket = document.getElementById("basket");
+        gameArea = document.getElementById("gameArea");
+        
+        // Скрываем текст окончания игры
+        gameOverText.setAttribute("visibility", "hidden");
+        
+        // Устанавливаем фокус на SVG для обработки клавиатуры
+        var svgElement = document.documentElement;
+        svgElement.setAttribute("tabindex", "0");
+        svgElement.focus();
+        
+        // Начинаем игру
+        startGame();
+      }
+      
+      // Начало игры
+      function startGame() {
+        // Очищаем предыдущие интервалы
+        if (gameInterval) clearInterval(gameInterval);
+        if (ballInterval) clearInterval(ballInterval);
+        if (timerInterval) clearInterval(timerInterval);
+        
+        score = 0;
+        timeLeft = gameTime;
+        balls = [];
+        gameRunning = true;
+        
+        // Обновляем интерфейс
+        updateScore();
+        updateTimer();
+        
+        // Показываем корзину
+        basket.setAttribute("visibility", "visible");
+        basket.setAttribute("transform", "translate(" + basketX + ",550)");
+        
+        // Запускаем игровые интервалы
+        gameInterval = setInterval(updateGame, 16); // ~60 FPS
+        ballInterval = setInterval(createBall, 800); // Новый шарик каждые 0.8 секунды
+        timerInterval = setInterval(updateTimer, 1000); // Обновление таймера каждую секунду
+      }
+      
+      // Создание нового шарика
+      function createBall() {
+        if (!gameRunning) return;
+        
+        var ball = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        var x = Math.random() * 700 + 50;
+        var size = Math.random() * 15 + 10;
+        var speed = Math.random() * 3 + 1;
+        var color = getRandomColor();
+        
+        ball.setAttribute("cx", x);
+        ball.setAttribute("cy", 50);
+        ball.setAttribute("r", size);
+        ball.setAttribute("fill", color);
+        ball.setAttribute("stroke", "#333");
+        ball.setAttribute("stroke-width", "2");
+        ball.setAttribute("class", "ball");
+        
+        gameArea.appendChild(ball);
+        
+        balls.push({
+          element: ball,
+          x: x,
+          y: 50,
+          size: size,
+          speed: speed,
+          caught: false
+        });
+      }
+      
+      // Обновление игровой логики
+      function updateGame() {
+        if (!gameRunning) return;
+        
+        // Обновляем позицию корзины
+        basket.setAttribute("transform", "translate(" + basketX + ",550)");
+        
+        // Обновляем позиции шариков
+        for (var i = balls.length - 1; i >= 0; i--) {
+          var ball = balls[i];
+          
+          if (ball.caught) continue;
+          
+          // Двигаем шарик вниз
+          ball.y += ball.speed;
+          ball.element.setAttribute("cy", ball.y);
+          
+          // Проверяем столкновение с корзиной
+          var basketWidth = 80;
+          var basketLeft = basketX - basketWidth/2;
+          var basketRight = basketX + basketWidth/2;
+          
+          if (ball.y >= 530 && ball.y <= 570 && 
+              ball.x >= basketLeft && ball.x <= basketRight) {
+            // Шарик пойман!
+            catchBall(i);
+          }
+          
+          // Проверяем выход за пределы экрана
+          if (ball.y > 600) {
+            gameArea.removeChild(ball.element);
+            balls.splice(i, 1);
+          }
+        }
+        
+        // Проверяем окончание времени
+        if (timeLeft <= 0) {
+          endGame();
+        }
+      }
+      
+      // Обработка пойманного шарика
+      function catchBall(index) {
+        var ball = balls[index];
+        ball.caught = true;
+        
+        // Увеличиваем счет в зависимости от размера шарика
+        var points = Math.max(1, Math.floor(20 - ball.size));
+        score += points;
+        
+        // Анимация исчезновения
+        ball.element.style.opacity = "0.5";
+        setTimeout(function() {
+          if (ball.element && ball.element.parentNode) {
+            gameArea.removeChild(ball.element);
+          }
+          balls.splice(index, 1);
+        }, 200);
+        
+        updateScore();
+      }
+      
+      // Обновление счета
+      function updateScore() {
+        scoreText.textContent = "Счет: " + score;
+      }
+      
+      // Обновление таймера
+      function updateTimer() {
+        if (!gameRunning) return;
+        
+        timeLeft--;
+        timerText.textContent = "Время: " + timeLeft + "с";
+        
+        if (timeLeft <= 0) {
+          endGame();
+        }
+      }
+      
+      // Окончание игры
+      function endGame() {
+        gameRunning = false;
+        
+        // Останавливаем интервалы
+        clearInterval(gameInterval);
+        clearInterval(ballInterval);
+        clearInterval(timerInterval);
+        
+        // Показываем результат
+        gameOverText.setAttribute("visibility", "visible");
+        gameOverText.textContent = "Игра окончена! Счет: " + score;
+        
+        // Удаляем все шарики
+        for (var i = balls.length - 1; i >= 0; i--) {
+          var ball = balls[i];
+          if (ball.element && ball.element.parentNode) {
+            gameArea.removeChild(ball.element);
+          }
+        }
+        balls = [];
+      }
+      
+      // Обработка нажатий клавиш
+      function handleKeyDown(evt) {
+        if (!gameRunning && evt.keyCode === 82) {
+          // R - рестарт
+          startGame();
+          return;
+        }
+        
+        if (!gameRunning) return;
+        
+        switch(evt.keyCode) {
+          case 37: // Стрелка влево
+            basketX = Math.max(40, basketX - basketSpeed);
+            break;
+          case 39: // Стрелка вправо
+            basketX = Math.min(760, basketX + basketSpeed);
+            break;
+          case 82: // R - рестарт
+            startGame();
+            break;
+        }
+        
+        // Предотвращаем прокрутку страницы
+        evt.preventDefault();
+      }
+      
+      // Вспомогательные функции
+      function getRandomColor() {
+        var colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#FFE66D", "#D972FF", "#FF9642"];
+        return colors[Math.floor(Math.random() * colors.length)];
+      }
+      
+      // Инициализация при загрузке
+      window.addEventListener('load', initGame, false);
+    ]]>
+  </script>
+  
+  <!-- Стили для игры -->
+  <style>
+    <![CDATA[
+      text {
+        font-family: Arial, sans-serif;
+        font-size: 24px;
+        fill: #333;
+        font-weight: bold;
+      }
+      
+      #basket {
+        fill: #6A0DAD;
+        stroke: #4A0080;
+        stroke-width: 3;
+      }
+      
+      #gameOverText {
+        font-size: 36px;
+        fill: #FF6B6B;
+        text-anchor: middle;
+      }
+      
+      .ball {
+        transition: opacity 0.2s ease;
+      }
+    ]]>
+  </style>
+  
+  <!-- Фон игрового поля -->
+  <defs>
+    <linearGradient id="skyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#87CEEB" />
+      <stop offset="100%" stop-color="#E0F7FA" />
+    </linearGradient>
+    
+    <pattern id="cloudPattern" patternUnits="userSpaceOnUse" width="200" height="200">
+      <circle cx="50" cy="50" r="20" fill="white" opacity="0.8"/>
+      <circle cx="80" cy="40" r="25" fill="white" opacity="0.8"/>
+      <circle cx="110" cy="50" r="18" fill="white" opacity="0.8"/>
+    </pattern>
+  </defs>
+  
+  <!-- Игровое поле -->
+  <rect width="100%" height="100%" fill="url(#skyGradient)" />
+  
+  <!-- Облака на фоне -->
+  <rect x="0" y="0" width="200" height="100" fill="url(#cloudPattern)" opacity="0.6"/>
+  <rect x="300" y="50" width="200" height="100" fill="url(#cloudPattern)" opacity="0.6"/>
+  <rect x="600" y="30" width="200" height="100" fill="url(#cloudPattern)" opacity="0.6"/>
+  
+  <!-- Солнце -->
+  <circle cx="700" cy="80" r="40" fill="#FFD700" stroke="#FF8C00" stroke-width="3"/>
+  
+  <!-- Земля -->
+  <rect x="0" y="580" width="800" height="20" fill="#8BC34A" stroke="#689F38" stroke-width="2"/>
+  
+  <!-- Игровая область -->
+  <g id="gameArea">
+    <!-- Корзина -->
+    <path id="basket" d="M-40,0 L40,0 L30,20 L-30,20 Z" transform="translate(350,550)" 
+          visibility="hidden"/>
+  </g>
+  
+  <!-- Интерфейс -->
+  <text id="scoreText" x="20" y="40">Счет: 0</text>
+  <text id="timerText" x="650" y="40">Время: 30с</text>
+  <text id="gameOverText" x="400" y="300" visibility="hidden">Игра окончена!</text>
+  
+  <!-- Инструкции -->
+  <text x="400" y="570" text-anchor="middle" font-size="16" fill="#333">
+    Управление: ← → двигать корзину, R - перезапуск
+  </text>
+  
+  <!-- Прозрачный прямоугольник для захвата событий -->
+  <rect width="100%" height="100%" fill="transparent" 
+        onkeydown="handleKeyDown(evt)" 
+        tabindex="0"
+        style="outline: none;"/>
+</svg>
