@@ -12,6 +12,12 @@
       var timeLeft = gameTime;
       var gameInterval, ballInterval, timerInterval;
       
+      // Переменные для тач-управления
+      var isTouchDevice = 'ontouchstart' in window;
+      var touchStartX = 0;
+      var basketStartX = 350;
+      var isDragging = false;
+      
       // Элементы SVG
       var scoreText, timerText, gameOverText, basket, gameArea;
       
@@ -32,8 +38,66 @@
         svgElement.setAttribute("tabindex", "0");
         svgElement.focus();
         
+        // Добавляем обработчики для тач-устройств
+        if (isTouchDevice) {
+          addTouchListeners();
+          document.getElementById("touchControls").setAttribute("visibility", "visible");
+        }
+        
         // Начинаем игру
         startGame();
+      }
+      
+      // Добавление обработчиков тач-событий
+      function addTouchListeners() {
+        var svgElement = document.documentElement;
+        
+        // Обработка начала касания
+        svgElement.addEventListener('touchstart', function(evt) {
+          if (!gameRunning) {
+            if (isTouchOnRestart(evt)) {
+              startGame();
+            }
+            return;
+          }
+          
+          var touch = evt.touches[0];
+          touchStartX = touch.clientX;
+          basketStartX = basketX;
+          isDragging = true;
+          evt.preventDefault();
+        }, false);
+        
+        // Обработка движения касания
+        svgElement.addEventListener('touchmove', function(evt) {
+          if (!isDragging || !gameRunning) return;
+          
+          var touch = evt.touches[0];
+          var deltaX = touch.clientX - touchStartX;
+          basketX = Math.max(40, Math.min(760, basketStartX + deltaX));
+          evt.preventDefault();
+        }, false);
+        
+        // Обработка окончания касания
+        svgElement.addEventListener('touchend', function(evt) {
+          isDragging = false;
+        }, false);
+        
+        svgElement.addEventListener('touchcancel', function(evt) {
+          isDragging = false;
+        }, false);
+      }
+      
+      // Проверка касания на кнопке рестарта
+      function isTouchOnRestart(evt) {
+        var touch = evt.touches[0];
+        var rect = document.getElementById("restartButton").getBoundingClientRect();
+        return (
+          touch.clientX >= rect.left &&
+          touch.clientX <= rect.right &&
+          touch.clientY >= rect.top &&
+          touch.clientY <= rect.bottom
+        );
       }
       
       // Начало игры
@@ -47,6 +111,7 @@
         timeLeft = gameTime;
         balls = [];
         gameRunning = true;
+        basketX = 350;
         
         // Обновляем интерфейс
         updateScore();
@@ -55,6 +120,9 @@
         // Показываем корзину
         basket.setAttribute("visibility", "visible");
         basket.setAttribute("transform", "translate(" + basketX + ",550)");
+        
+        // Скрываем текст окончания игры
+        gameOverText.setAttribute("visibility", "hidden");
         
         // Запускаем игровые интервалы
         gameInterval = setInterval(updateGame, 16); // ~60 FPS
@@ -122,14 +190,11 @@
           
           // Проверяем выход за пределы экрана
           if (ball.y > 600) {
-            gameArea.removeChild(ball.element);
+            if (ball.element && ball.element.parentNode) {
+              gameArea.removeChild(ball.element);
+            }
             balls.splice(i, 1);
           }
-        }
-        
-        // Проверяем окончание времени
-        if (timeLeft <= 0) {
-          endGame();
         }
       }
       
@@ -183,6 +248,11 @@
         // Показываем результат
         gameOverText.setAttribute("visibility", "visible");
         gameOverText.textContent = "Игра окончена! Счет: " + score;
+        
+        // Показываем кнопку рестарта для тач-устройств
+        if (isTouchDevice) {
+          document.getElementById("restartButton").setAttribute("visibility", "visible");
+        }
         
         // Удаляем все шарики
         for (var i = balls.length - 1; i >= 0; i--) {
@@ -256,6 +326,26 @@
       .ball {
         transition: opacity 0.2s ease;
       }
+      
+      #restartButton {
+        fill: #4CAF50;
+        stroke: #2E7D32;
+        stroke-width: 2;
+        cursor: pointer;
+      }
+      
+      #restartText {
+        font-size: 20px;
+        fill: white;
+        text-anchor: middle;
+        pointer-events: none;
+      }
+      
+      #touchControls {
+        font-size: 16px;
+        fill: #666;
+        text-anchor: middle;
+      }
     ]]>
   </style>
   
@@ -299,9 +389,20 @@
   <text id="timerText" x="650" y="40">Время: 30с</text>
   <text id="gameOverText" x="400" y="300" visibility="hidden">Игра окончена!</text>
   
+  <!-- Кнопка рестарта для мобильных устройств -->
+  <g id="restartButton" visibility="hidden" transform="translate(400, 350)" onclick="startGame()">
+    <rect x="-60" y="-20" width="120" height="40" rx="10" ry="10"/>
+    <text id="restartText" x="0" y="5">Играть снова</text>
+  </g>
+  
   <!-- Инструкции -->
   <text x="400" y="570" text-anchor="middle" font-size="16" fill="#333">
     Управление: ← → двигать корзину, R - перезапуск
+  </text>
+  
+  <!-- Инструкции для тач-устройств -->
+  <text id="touchControls" x="400" y="520" text-anchor="middle" visibility="hidden">
+    Касайтесь и двигайте пальцем для управления корзиной
   </text>
   
   <!-- Прозрачный прямоугольник для захвата событий -->
